@@ -21,9 +21,9 @@ Additional software is required to flash the truckdevil_sketch firmware to the M
 ## Installation
 
 - Follow the first 3 steps included in the M2 [Arduino IDE Quick Start](https://docs.macchina.cc/m2-docs/arduino) guide
-	1) Install the Arduino Desktop IDE
-	2) Install the Macchina M2 Board Configuration
-	3) Install drivers
+	- Install the Arduino Desktop IDE
+	- Install the Macchina M2 Board Configuration
+	- Install drivers
 - Upload truckDevil_sketch.ino to the M2
 	- Ensure M2 is plugged in over USB and that it's selected as the active board. 
 	```
