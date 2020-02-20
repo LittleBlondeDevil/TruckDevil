@@ -25,19 +25,19 @@ Additional software is required to flash the truckdevil_sketch firmware to the M
 	2) Install the Macchina M2 Board Configuration
 	3) Install drivers
 - Upload truckDevil_sketch.ino to the M2
-	1. Ensure M2 is plugged in over USB and that it's selected as the active board. 
+	- Ensure M2 is plugged in over USB and that it's selected as the active board. 
 	```
 	Tools > Board: "[...]" > Macchina M2
 	```
-	2. Select the serial port in use for the M2.
+	- Select the serial port in use for the M2.
 	```
 	Tools > Port
 	```
-	3. Open the truckDevil_sketch.ino file and upload it to the M2.
+	- Open the truckDevil_sketch.ino file and upload it to the M2.
 	```
 	Sketch > Upload
 	```
-	4. Once uploaded, disconnect M2 and plug back in.
+	- Once uploaded, disconnect M2 and plug back in.
 - Install pyserial for connecting to the M2 over python code:
 	```
 	$pip install pyserial
