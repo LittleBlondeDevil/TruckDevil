@@ -59,7 +59,7 @@ Next, serial communications and the truckDevil object can be created like so, pa
 devil = truckDevil.TruckDevil('COM7', 115200, 250000)
 ```
 
-The serial port could be 'COMX' on Windows or '/dev/ttyX' on Linux, corresponding to the port that the M2 is connected to
+The serial port could be 'COMX' on Windows or '/dev/ttyX' on Linux, corresponding to the port that the M2 is connected to.
 The serial baud rate is defaulted to 115200, unless the truckDevil_sketch firmware file has been modified.
 The CAN baud rate is dependent on the CANBUS that the M2 is connected to.
 
@@ -81,49 +81,49 @@ devil.printMessages()
 The following optional parameters can be added and combined:
 
 ```
-devil.printMessages(abstractTPM=False) 	#don't abstract the Transport Protocol Messages, include every message
+devil.printMessages(abstractTPM=False)	#don't abstract the Transport Protocol Messages, include every message
 
-devil.printMessages(readTime=5.0) 		#only read and print messages for 5 seconds
+devil.printMessages(readTime=5.0)	#only read and print messages for 5 seconds
 
-devil.printMessages(numMessages=100) 	#only read and print 100 messages
+devil.printMessages(numMessages=100)	#only read and print 100 messages
 
-devil.printMessages(verbose=True) 		#includes decoded information about each message
+devil.printMessages(verbose=True)	#includes decoded information about each message
 ```
 
 
 To read and save all J1939 messages on the BUS in a background thread:
 
 ```
-devil.startDataCollection() 			#start the collection of messages
-time.sleep(5)							#sleep or do something while the messages are being collected
+devil.startDataCollection()	#start the collection of messages
+time.sleep(5)	#sleep or do something while the messages are being collected
 messages = devil.stopDataCollection()	#stops the background thread and returns the messages that were collected
-devil.saveDataCollected(messages)		#saves the messages that were collected to a file
+devil.saveDataCollected(messages)	#saves the messages that were collected to a file
 ```
 
 The following optional parameter can be added to the previous functions used:
 
 ```
-devil.startDataCollection(abstractTPM=False) 				#don't abstract the Transport Protocol Messages, include every message
+devil.startDataCollection(abstractTPM=False)	#don't abstract the Transport Protocol Messages, include every message
 
 devil.saveDataCollected(messages, fileName='myfile.txt')	#specify the file name to save to
-devil.saveDataCollected(messages, verbose=True)				#includes decoded information about each message
+devil.saveDataCollected(messages, verbose=True)	#includes decoded information about each message
 ```
 
 
 To find a specific J1939 message on the BUS:
 
 ```
-devil.startDataCollection(abstractTPM=True)		#start the collection of messages
+devil.startDataCollection(abstractTPM=True)	#start the collection of messages
 
 found = False
 while not found:
 	messages = devil.getCurrentCollectedData()	#does not stop the background thread, simply returns the messages that have been collected so far
-	for m in messages:							#iterate through the messages
-		if (m.pgn == 0xf004):					#if the message we care about is in the messages list
+	for m in messages:	#iterate through the messages
+		if (m.pgn == 0xf004):	#if the message we care about is in the messages list
 			print(devil.getDecodedMessage(m))	#returns the verbose version of the message
 			found = True
 			break
-devil.stopDataCollection()						#stops the background thread and returns the messages that were collected
+devil.stopDataCollection()	#stops the background thread and returns the messages that were collected
 ```
 
 
