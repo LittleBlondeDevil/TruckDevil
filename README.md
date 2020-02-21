@@ -95,7 +95,7 @@ To read and save all J1939 messages on the BUS in a background thread:
 
 ```
 devil.startDataCollection()		#start the collection of messages
-time.sleep(5)			#sleep or do something while the messages are being collected
+time.sleep(5)				#sleep or do something while the messages are being collected
 messages = devil.stopDataCollection()	#stops the background thread and returns the messages that were collected
 devil.saveDataCollected(messages)	#saves the messages that were collected to a file
 ```
@@ -118,12 +118,12 @@ devil.startDataCollection(abstractTPM=True)			#start the collection of messages
 found = False
 while not found:
 	messages = devil.getCurrentCollectedData()		#does not stop the background thread, simply returns the messages that have been collected so far
-	for m in messages:			#iterate through the messages
+	for m in messages:					#iterate through the messages
 		if (m.pgn == 0xf004):				#if the message we care about is in the messages list
 			print(devil.getDecodedMessage(m))	#returns the verbose version of the message
 			found = True
 			break
-devil.stopDataCollection()				#stops the background thread and returns the messages that were collected
+devil.stopDataCollection()					#stops the background thread and returns the messages that were collected
 ```
 
 
