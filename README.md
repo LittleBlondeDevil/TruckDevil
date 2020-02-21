@@ -43,7 +43,7 @@ Additional software is required to flash the truckdevil_sketch firmware to the M
 	$pip install pyserial
 	```
 
-## Useage
+## Usage
 
 TruckDevil allows for reading messages, decoding them, saving them, and sending them.
 
