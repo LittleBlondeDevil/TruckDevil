@@ -4,6 +4,7 @@ import threading
 import time
 import math
 import json
+import os
 
 class TruckDevil:
     def __init__(self, port=None, serial_baud=115200, can_baud=0):
@@ -27,19 +28,19 @@ class TruckDevil:
         self._printMessagesTimer = None
         
         self._pgn_list = {}
-        with open('pgn_list.json') as pgn_file:
+        with open(os.path.join('resources', 'pgn_list.json')) as pgn_file:
             self._pgn_list = json.load(pgn_file)
         
         self._spn_list = {}
-        with open('spn_list.json') as spn_file:
+        with open(os.path.join('resources', 'spn_list.json')) as spn_file:
             self._spn_list = json.load(spn_file)
             
         self._src_addr_list = {}
-        with open('src_addr_list.json') as src_addr_file:
+        with open(os.path.join('resources', 'src_addr_list.json')) as src_addr_file:
             self._src_addr_list = json.load(src_addr_file)
             
         self._bit_decoding_list = {}
-        with open('dataBitDecoding.json') as bit_decoding_file:
+        with open(os.path.join('resources', 'dataBitDecoding.json')) as bit_decoding_file:
             self._bit_decoding_list = json.load(bit_decoding_file)
         
         baudToSend = str(can_baud).zfill(7) #ensure that can_baud is filled to 7 digits

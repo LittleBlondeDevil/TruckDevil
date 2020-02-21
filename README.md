@@ -29,7 +29,7 @@ Additional software is required to flash the truckdevil_sketch firmware to the M
 	```
 	Tools > Board: "[...]" > Macchina M2
 	```
-	- Select the serial port in use for the M2.
+	- Select the serial port in use for the M2 (usually named "Arduino Due").
 	```
 	Tools > Port
 	```
@@ -47,7 +47,7 @@ Additional software is required to flash the truckdevil_sketch firmware to the M
 
 TruckDevil allows for reading messages, decoding them, saving them, and sending them.
 
-The first thing that must be done is to create a new python file and import the truckDevil file:
+The first thing that must be done is to create a new python file within the project directory and import the truckDevil file:
 
 ```
 import truckDevil
