@@ -91,7 +91,7 @@ class TruckDevil:
         return dataCollected
         
     '''
-    save the collected messages to a text file
+    save the collected messages to a file
     messages: the collected messages outputted from stopDataCollection
     fileName: optional, the name of the file to save the data to
     verbose: optional, true in order to save the message in decoded form
@@ -109,6 +109,28 @@ class TruckDevil:
             else:
                 f.write(self.getDecodedMessage(m) + '\n')
         f.close()    
+    
+    
+    '''
+    take in file previously saved by saveDataCollected, returns corresponding list containing J1939_Message objects
+    fileName: the name of the file where the data is saved
+    '''
+    def importDataCollected(self, fileName):
+        messages = []
+        if (os.path.exists(fileName)):
+            with open (fileName, 'r') as inFile:
+                firstLine = True
+                for line in inFile:
+                    if (firstLine):
+                        firstLine = False
+                    else:
+                        parts = line.split()
+                        if (len(parts) == 7 and parts[3] == '-->' and '[' in line):
+                            message = J1939_Message(priority = int(parts[0]), pgn = int(parts[1], 16), dst_addr = int(parts[4], 16), src_addr = int(parts[2], 16), data = parts[6])
+                            messages.append(message)
+                return messages
+        else:
+            raise Exception('file name given does not exist.')
     
     '''
     takes a J1939_Message object and returns a string containing the 

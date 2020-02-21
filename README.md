@@ -126,6 +126,13 @@ while not found:
 devil.stopDataCollection()					#stops the background thread and returns the messages that were collected
 ```
 
+To import a file that was originally saved using saveDataCollected:
+
+```
+messages = devil.importDataCollected('m2_collected_data_1582310916')  #returns a list of J1939_Message objects
+```
+
+This would be useful for post-capture analysis and replaying.
 
 ### Sending Messages
 
