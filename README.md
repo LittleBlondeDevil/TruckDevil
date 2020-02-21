@@ -172,4 +172,4 @@ The Transport Protocol will be handled automatically.
 
 Thank you Jeremy Daily for providing truck ECUs and other useful hardware. Additionally, the dataBitDecoding.json file was created and modified from resources contained within Jeremy's [TU-RP1210](https://github.com/Heavy-Vehicle-Networking-At-U-Tulsa/TU-RP1210) repo.
 
-I would also like to make mention of another great tool available for CAN experimentations, [CANCAT](https://github.com/atlas0fd00m/CanCat), developed by researchers at GRIMM.
+I would also like to make mention of another great tool available for CAN experimentations, [CanCat](https://github.com/atlas0fd00m/CanCat), developed by researchers at GRIMM.
