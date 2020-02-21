@@ -91,7 +91,7 @@ devil.printMessages(verbose=True)	#includes decoded information about each messa
 ```
 
 
-To read and save all J1939 messages on the BUS in a background thread:
+To read and save all J1939 messages on the BUS, in a background thread:
 
 ```
 devil.startDataCollection()		#start the collection of messages
@@ -160,3 +160,9 @@ devil.sendMessage(message)
 ```
 
 The Transport Protocol will be handled automatically.
+
+### Acknowledgments
+
+Thank you Jeremy Daily for providing truck ECUs and other useful tools. Additionally, the dataBitDecoding.json file was created and modified from resources contained within Jeremy's TU-RP1210 [repo](https://github.com/Heavy-Vehicle-Networking-At-U-Tulsa/TU-RP1210).
+
+I would also like to make mention of another great tool available for CAN experimentations, [CANCAT](https://github.com/atlas0fd00m/CanCat), developed by researchers at GRIMM.
