@@ -31,7 +31,7 @@ class TruckDevil:
             self._pgn_list = json.load(pgn_file)
         
         self._spn_list = {}
-        with open('spn_list2.json') as spn_file:
+        with open('spn_list.json') as spn_file:
             self._spn_list = json.load(spn_file)
             
         self._src_addr_list = {}
