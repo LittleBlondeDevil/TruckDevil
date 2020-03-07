@@ -141,7 +141,7 @@ To create a standard J1939 message, use the J1939_Message class:
 ```
 priority = 0x06
 pgn = 0xF004
-dst_addr = 0x00
+dst_addr = 0xFF
 src_addr = 0xF9
 data = "08FEFEFEFE00FFFE"
 message = truckDevil.J1939_Message(priority, pgn, dst_addr, src_addr, data)	#takes in integers, except data which is a hex string
@@ -159,7 +159,7 @@ To send a multipacket message, just pass the data string in it's entirety to J19
 ```
 priority = 0x06
 pgn = 0xFECA
-dst_addr = 0x00
+dst_addr = 0xFF
 src_addr = 0xF9
 data = "47FF5B00040171020E256F00030101080907"
 message = truckDevil.J1939_Message(priority, pgn, dst_addr, src_addr, data)
