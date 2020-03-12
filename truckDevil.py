@@ -149,28 +149,31 @@ class TruckDevil:
             decoded += '      Label: ' + self._pgn_list[str(message.pgn)]['parameterGroupLabel'] + '\n'
             decoded += '      PGNDataLength: ' + str(self._pgn_list[str(message.pgn)]['pgnDataLength']) + '\n'
             decoded += '      TransmissionRate: ' + self._pgn_list[str(message.pgn)]['transmissionRate'] + '\n'
-            for spn in self._pgn_list[str(message.pgn)]['spnList']: #for each spn that is part the given pgn
-                if (str(spn) in self._spn_list): #only include this portion if the spn is in the spn_list
-                    decoded += '      SPN(' + str(spn) + '): ' + self._spn_list[str(spn)]['spnName'] + '\n'
-                    if (self._spn_list[str(spn)]['spnLength'] != "variable"): #ensure it's not a variable length SPN
-                        totalBits = self._spn_list[str(spn)]['spnLength']
-                        startBit = self._spn_list[str(spn)]['bitPositionStart']
-                        endBit = startBit + totalBits
-                        
-                        bin_data = bin(int(message.data, 16))[2:].zfill(int((len(message.data)/2) * 8))
-                        start = len(bin_data) - endBit
-                        end = start + totalBits - 1
-                        extracted_data = int(bin_data[start:end+1], 2) 
-                        if (extracted_data != int("1"*totalBits, 2)):#if it's all 1's, means we don't care about the value, don't add
-                            if(self._spn_list[str(spn)]['units'] == 'bit' and str(spn) in self._bit_decoding_list): #if it's a bit data type, use the bit_decoding_list
-                                decoded += '        ' + str(extracted_data) + ' : ' + self._bit_decoding_list[str(spn)][str(extracted_data)] + '\n'    
-                            else: #if the type is anything but 'bit', get the value using the resolution and offset and unit
-                                extracted_data = (extracted_data * (self._spn_list[str(spn)]['resolutionNumerator'] / self._spn_list[str(spn)]['resolutionDenominator'])) + self._spn_list[str(spn)]['offset'] #multiply by the resolution and add offset to get appropriate range
-                                if (extracted_data.is_integer()): 
-                                    extracted_data = str(int(extracted_data))
-                                else:
-                                    extracted_data = "%.2f" % extracted_data
-                                decoded += '        ' + str(extracted_data) + ' ' + self._spn_list[str(spn)]['units'] + '\n'                        
+            if (self._pgn_list[str(message.pgn)]['pgnDataLength'] == len(message.data)/2): #only decode data if it matches the number of bytes it's supposed to
+                for spn in self._pgn_list[str(message.pgn)]['spnList']: #for each spn that is part the given pgn
+                    if (str(spn) in self._spn_list): #only include this portion if the spn is in the spn_list
+                        decoded += '      SPN(' + str(spn) + '): ' + self._spn_list[str(spn)]['spnName'] + '\n'
+                        if (self._spn_list[str(spn)]['spnLength'] != "variable"): #ensure it's not a variable length SPN
+                            totalBits = self._spn_list[str(spn)]['spnLength']
+                            startBit = self._spn_list[str(spn)]['bitPositionStart']
+                            endBit = startBit + totalBits
+                            
+                            bin_data = bin(int(message.data, 16))[2:].zfill(int((len(message.data)/2) * 8))
+                            start = len(bin_data) - endBit
+                            end = start + totalBits - 1
+                            extracted_data = int(bin_data[start:end+1], 2) 
+                            if (extracted_data != int("1"*totalBits, 2)):#if it's all 1's, means we don't care about the value, don't add
+                                if(self._spn_list[str(spn)]['units'] == 'bit' and str(spn) in self._bit_decoding_list): #if it's a bit data type, use the bit_decoding_list
+                                    decoded += '        ' + str(extracted_data) + ' : ' + self._bit_decoding_list[str(spn)][str(extracted_data)] + '\n'    
+                                else: #if the type is anything but 'bit', get the value using the resolution and offset and unit
+                                    extracted_data = (extracted_data * (self._spn_list[str(spn)]['resolutionNumerator'] / self._spn_list[str(spn)]['resolutionDenominator'])) + self._spn_list[str(spn)]['offset'] #multiply by the resolution and add offset to get appropriate range
+                                    if (extracted_data.is_integer()): 
+                                        extracted_data = str(int(extracted_data))
+                                    else:
+                                        extracted_data = "%.2f" % extracted_data
+                                    decoded += '        ' + str(extracted_data) + ' ' + self._spn_list[str(spn)]['units'] + '\n'                        
+            else: #otherwise add a message that it's not the correct form
+                decoded += '      Cannot decode SPNs due to incorrect format of data'
         return decoded
     
          
@@ -181,7 +184,7 @@ class TruckDevil:
     numMessages: number of messages to print before stopping. If not specified, it will not be limited
     verbose: optional, true in order to print the message in decoded form (uses getDecodedMessage)
     '''
-    def printMessages(self, abstractTPM=True, readTime=None, numMessages=None, verbose=False):
+    def printMessages(self, abstractTPM=True, readTime=None, numMessages=None, verbose=False, logToFile=False):
         if (self._dataCollectionOccurring == True): #Only allow if data collection is not occurring
                 raise Exception('stop data collection before proceeding with this function')
         if (readTime != None): #if optional readTime is utilized
@@ -191,6 +194,10 @@ class TruckDevil:
         with self._lockConversations:
             self._conversations = []
         self._printMessagesTimeDone = False
+        if (logToFile): #to log to file
+            fileName = 'm2_collected_data_' + str(int(time.time()))
+            logFile = open(fileName, "x")
+            logFile.write('Priority    PGN    Source --> Destination    [Num Bytes]    data' + '\n')
         #keep printing while our timer isn't done or the number of messages to print hasn't been reached (whichever comes first) - if neither are utilized, keep going forever
         while self._printMessagesTimeDone == False and (numMessages == None or messagesPrinted < numMessages): 
             if (self._dataCollectionOccurring == True): #Only allow if data collection is not occurring
@@ -204,8 +211,12 @@ class TruckDevil:
                     del self._conversations[i]
                     if (verbose == False):
                         print(message) #print completed multipacket message
+                        if (logToFile):
+                            logFile.write(str(message) + '\n')
                     else:
                         print(self.getDecodedMessage(message))
+                        if (logToFile):
+                            logFile.write(self.getDecodedMessage(message) + '\n')
                     messagesPrinted = messagesPrinted + 1
                     break
             self._lockConversations.release()
@@ -246,7 +257,7 @@ class TruckDevil:
             
             #Multipacket message received, broadcasted or peer-to-peer request to send
             if (pgn == 0xec00 and (data[0:2] == "20" or data[0:2] == "10" )):
-                mp_message = J1939_MultiPacketMessage(message)
+                mp_message = _J1939_MultiPacketMessage(message)
                 with self._lockConversations:
                     self._conversations.append(mp_message)
                 if (abstractTPM==True): #if abstractTPM is True, break here and don't print this message
@@ -275,10 +286,113 @@ class TruckDevil:
                     continue
             if (verbose == False):
                 print(message) #print it
+                if (logToFile):
+                    logFile.write(str(message) + '\n')
             else:
                 print(self.getDecodedMessage(message))
-            messagesPrinted = messagesPrinted + 1          
-
+                if (logToFile):
+                    logFile.write(self.getDecodedMessage(message) + '\n')
+            messagesPrinted = messagesPrinted + 1
+        if (logToFile):#close the log file before exiting
+            logFile.close()
+        if (readTime != None):
+            self._printMessagesTimer.cancel()
+    
+    '''
+    read all messages from M2 until a specific message is found, atleast one parameter should be specified to look for
+    dataContains: optional, if specified, the message must contain this hex string in the data portion, ex: "010203"
+    src_addr: optional, if specified, the message must have a src_addr of this parameter, ex: 0xF9
+    dst_addr: optional, if specified, the message must have a dst_addr of this parameter, ex: 0x0B
+    pgn: optional, if specified, the message must have a pgn of this parameter, ex: 0xF004
+    returns both the message that matched the specified parameters, and the list of messages that were collected
+    '''
+    def readMessagesUntil(self, dataContains=None, target_src_addr=None, target_dst_addr=None, target_pgn=None):
+        if (dataContains==None and target_src_addr==None and target_dst_addr==None and target_pgn==None):
+            raise Exception('atleast one parameter (dataContains, src_addr, dst_addr, pgn) must be included')
+        
+        conversations = []
+        collectedMessages = []
+        while True: 
+        #look for full multipacket message to return first, if none found, receive from socket
+            for i in range(0, len(conversations)): 
+                #found one ready to send - return it 
+                if (conversations[i].readyToSend):
+                    message = conversations[i].completeMessage
+                    del conversations[i]
+                    collectedMessages.append(message) #add completed multipacket message to collectedMessages list
+                    if ( (dataContains==None or dataContains in message.data) 
+                        and (target_src_addr==None or message.src_addr==target_src_addr) 
+                        and (target_dst_addr==None or message.dst_addr==target_dst_addr) 
+                        and (target_pgn==None or message.pgn==target_pgn) ):
+                
+                        return message, collectedMessages
+                    break
+        
+            #get one CAN message from M2 (ex: 18EF0B00080102030405060708)
+            can_packet = self._readOneMessage()
+            
+            #src addr is byte 4
+            src_addr = int(can_packet[6:8], 16)
+            
+            '''pgn is byte 2 and 3, where byte 2 is pdu_format
+            and byte 3 is pdu_specific'''
+            pgn = can_packet[2:6]
+            
+            pdu_format = int(pgn[0:2], 16)
+            pdu_specific = int(pgn[2:4], 16)
+            
+            '''if pdu_format is 0-239 
+            then pdu_specific is dst_addr, 
+            otherwise it is group extension'''
+            if (pdu_format < 240):
+                dst_addr = pdu_specific
+                pgn = pgn[0:2] + "00" #add 00 to pgn if destination specific (ex: EC0B pgn becomes EC00 with dst_addr 0x0B)
+            else:
+                dst_addr = 0xFF #broadcast message
+            pgn = int(pgn, 16)
+            
+            #priority is bits 4-6 in byte 1 of message (ex: byte 1 = 0x18, 0b00011000 = priority of 6)
+            priority = int(bin(int(can_packet[0:2], 16))[2:5], 2)
+            
+            #data length is byte 5
+            dlc = int(can_packet[8:10], 16)
+            
+            #data is contained in bytes 6-13, in a hex string format
+            data = can_packet[10:26]
+            
+            message = J1939_Message(priority, pgn, dst_addr, src_addr, data, dlc)
+            
+            #Multipacket message received, broadcasted or peer-to-peer request to send
+            if (pgn == 0xec00 and (data[0:2] == "20" or data[0:2] == "10" )):
+                mp_message = _J1939_MultiPacketMessage(message)
+                conversations.append(mp_message)
+                
+            #Multipacket data transfer message recieved
+            if (pgn == 0xeb00):
+                #find the correct conversation 
+                for i in range(0, len(conversations)): 
+                    #correct conversation
+                    if (conversations[i].completeMessage.src_addr == src_addr and conversations[i].completeMessage.dst_addr == dst_addr):
+                        conversations[i].received_packets += 1
+                        if (conversations[i].complete()): #received all the packets
+                            bytes_left = conversations[i].num_bytes - conversations[i].received_bytes
+                            conversations[i].received_bytes += bytes_left
+                            data_index = (bytes_left*2) + 2
+                            conversations[i].completeMessage.data += data[2:data_index] #copy final bytes
+                            conversations[i].readyToSend = True #ready to send next time a message is read
+                        else: #more packets needed, add 7 bytes of data to stored message
+                            conversations[i].received_bytes += 7
+                            conversations[i].completeMessage.data += data[2:16] #skip first byte, this is counter
+                        break    
+            collectedMessages.append(message) #add message to collectedMessages list
+            #if the message matches the one we're looking for
+            if ( (dataContains==None or dataContains in message.data) 
+                and (target_src_addr==None or message.src_addr==target_src_addr) 
+                and (target_dst_addr==None or message.dst_addr==target_dst_addr) 
+                and (target_pgn==None or message.pgn==target_pgn) ):
+                
+                return message, collectedMessages
+        
     '''
     send message to M2 to get pushed to the BUS.
     message: a J1939_Message to be sent on the BUS
@@ -379,7 +493,6 @@ class TruckDevil:
       
     #read and store messages in the collectedMessages array  
     def _readMessage(self, abstractTPM=True):
-        #keep collection while our timer isn't done or the number of messages to collect hasn't been reached (whichever comes first) - if neither are utilized, keep going forever
         while True: 
             if (self._dataCollectionOccurring == True): #keep the thread from executing if not in collection state
                 #look for full multipacket message to return first, if none found, receive from socket
@@ -430,7 +543,7 @@ class TruckDevil:
                 
                 #Multipacket message received, broadcasted or peer-to-peer request to send
                 if (pgn == 0xec00 and (data[0:2] == "20" or data[0:2] == "10" )):
-                    mp_message = J1939_MultiPacketMessage(message)
+                    mp_message = _J1939_MultiPacketMessage(message)
                     with self._lockConversations:
                         self._conversations.append(mp_message)
                     if (abstractTPM==True): #if abstractTPM is True, break here and don't add this message to collectedMessages
@@ -507,6 +620,11 @@ class J1939_Message:
             raise ValueError('Data must be in hexadecimal format')
         if (len(data) % 2 != 0 or len(data) > 3570):
             raise ValueError('Length of data must be an even number and shorter than 1785 bytes')
+        
+        if (pgn < 0xF000):
+            pgn = int(hex(pgn)[2:4] + '00',16)
+        else:
+            dst_addr = 0xff
 
         self.priority = priority
         self.pgn = pgn
@@ -516,17 +634,17 @@ class J1939_Message:
         self.data = data
         
     #overrides default str method to return the parsed message
-    #"priority  pgn  src_addr  dst_addr  [len]  data"
+    #"priority  pgn  src_addr --> dst_addr  [total_bytes]  data"
     def __str__(self):
         return "  %02X %04X %02X --> %02X [%d]  %s" % (self.priority, self.pgn, 
         self.src_addr, self.dst_addr, self.total_bytes, self.data.upper())
         
         
 '''
-Creates a new multipacket message
+Creates a new multipacket message - for internal use only to deal with Transport Protocol
 first_message: a J1939_Message object to initialize the multipacket message
 '''    
-class J1939_MultiPacketMessage:
+class _J1939_MultiPacketMessage:
     def __init__(self, first_message=None):
     
         if isinstance(first_message, J1939_Message)==False or first_message == None:

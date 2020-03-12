@@ -42,8 +42,8 @@
         "3": "not available"
     },
     "1121": {
-        "0": "rake pedal is not being pressed",
-        "1": "rake pedal is being pressed",
+        "0": "brake pedal is not being pressed",
+        "1": "brake pedal is being pressed",
         "2": "error",
         "3": "not available"
     },
@@ -841,11 +841,8 @@
         "3": "not used"
     },
     "1706": {
-        "0": "means convert spns per the version 4 definition below ",
-        "1": "spn assumed to be sent most significant bit first",
-        "2": "spn represented as intel format for most significant 16 bits  with 3 least significant bits of 19 bits in with fmi value.",
-        "3": "spn represented as intel format for all 19 bits (least significant sent first) ",
-        "4": "spn represented as intel format for all 19 bits with the spn conversion method set to 0."
+        "0": "spn represented as Intel format for all 19 bits with the spn conversion method set to 0.",
+        "1": "spn either assumed to be sent MSB first(ver1), represented as Intel format for most significant 16 bits with 3 least significant bits of 19 bits in with FMI value(ver2), or lastly spn represented as Intel format for al 19 bits (LSB first)(ver3)"
     },
     "1710": {
         "0": "not tracking left side",
@@ -10973,6 +10970,90 @@
         "2": "reserved for sae assignment",
         "3": "not available"
     },
+	"4113": {
+        "0": "lamp off",
+        "1": "lamp on",
+        "2": "short MI",
+        "3": "unavailable"
+    },
+	"4114": {
+        "0": "lamp off",
+        "1": "lamp on",
+        "2": "reserved",
+        "3": "unavailable"
+    },
+	"4115": {
+        "0": "lamp off",
+        "1": "lamp on",
+        "2": "reserved",
+        "3": "unavailable"
+    },
+	"4116": {
+        "0": "lamp off",
+        "1": "lamp on",
+        "2": "reserved",
+        "3": "unavailable"
+    },
+	"4117": {
+        "0": "slow flash (1 Hz, 50% duty cycle)",
+        "1": "fast flash (2 Hz or faster, 50% duty cycle)",
+        "2": "class C DTC (for WWH OBD discriminatory display systems, not applicable for other OBD non-discriminatory display systems)",
+        "3": "unavailable / do not flash"
+    },
+	"4118": {
+        "0": "slow flash (1 Hz, 50% duty cycle)",
+        "1": "fast flash (2 Hz or faster, 50% duty cycle)",
+        "2": "reserved",
+        "3": "unavailable / do not flash"
+    },
+	"4119": {
+        "0": "slow flash (1 Hz, 50% duty cycle)",
+        "1": "fast flash (2 Hz or faster, 50% duty cycle)",
+        "2": "reserved",
+        "3": "unavailable / do not flash"
+    },
+	"4120": {
+        "0": "slow flash (1 Hz, 50% duty cycle)",
+        "1": "fast flash (2 Hz or faster, 50% duty cycle)",
+        "2": "reserved",
+        "3": "unavailable / do not flash"
+    },
+	"4127": {
+        "0": "outside control area",
+        "1": "inside control area",
+        "2": "reserved",
+        "3": "not available"
+    },
+	"4128": {
+        "0": "outside area",
+        "1": "inside area",
+        "2": "reserved",
+        "3": "not available"
+    },
+	"4129": {
+        "0": "outside area",
+        "1": "inside area",
+        "2": "reserved",
+        "3": "not available"
+    },
+	"4130": {
+        "0": "outside control area",
+        "1": "inside control area",
+        "2": "reserved",
+        "3": "not available"
+    },
+	"4131": {
+        "0": "outside area",
+        "1": "inside area",
+        "2": "reserved",
+        "3": "not available"
+    },
+	"4132": {
+        "0": "outside area",
+        "1": "inside area",
+        "2": "reserved",
+        "3": "not available"
+    },
     "4175": {
         "0": "not active",
         "1": "active - forced by switch (see spn 3696)",
@@ -15395,7 +15476,7 @@
         "37": "reserved ",
         "38": "reserved ",
         "39": "reserved ",
-        "4": "other",
+        "4": "pending NAME not set",
         "40": "reserved ",
         "41": "reserved ",
         "42": "reserved ",
@@ -15406,7 +15487,7 @@
         "47": "reserved ",
         "48": "reserved ",
         "49": "reserved ",
-        "5": "reserved ",
+        "5": "other",
         "50": "reserved ",
         "51": "reserved ",
         "52": "reserved ",
@@ -17518,8 +17599,8 @@
         "3": "not available"
     },
     "597": {
-        "0": "rake pedal released",
-        "1": "rake pedal depressed",
+        "0": "brake pedal released",
+        "1": "brake pedal depressed",
         "2": "error",
         "3": "not available"
     },

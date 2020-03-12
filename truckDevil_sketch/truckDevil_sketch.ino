@@ -86,18 +86,18 @@ CAN_FRAME passFrameFromSerial() {
 
 void loop() {
   // put your main code here, to run repeatedly:
-      CAN_FRAME incoming;
-      CAN_FRAME outgoing;
-      //if there's an incoming CAN message to read from M2, pass it to Serial
-      if (Can0.available() > 0) {
-        Can0.read(incoming);
-        passFrameToSerial(incoming);
-      }
-      //if there's a message from Serial, pass it to M2 CAN transceiver
-      if (Serial.available() > 0) {
-        outgoing = passFrameFromSerial();
-        if (outgoing.id != -1) { //no errors occurred
-          Can0.sendFrame(outgoing);
-        }
-      }
+  CAN_FRAME incoming;
+  CAN_FRAME outgoing;
+  //if there's an incoming CAN message to read from M2, pass it to Serial
+  if (Can0.available() > 0) {
+	Can0.read(incoming);
+	passFrameToSerial(incoming);
+  }
+  //if there's a message from Serial, pass it to M2 CAN transceiver
+  if (Serial.available() > 0) {
+	outgoing = passFrameFromSerial();
+	if (outgoing.id != -1) { //no errors occurred
+	  Can0.sendFrame(outgoing);
+	}
+  }
 }
