@@ -1,0 +1,1008 @@
+{
+	"10": {
+		"service": "DiagnosticSessionControl",
+		"description": "used to enable different diagnostic sessions in the server(s).",
+		"serviceID": 16,
+		"type": "request",
+		"subfunction_supported": true,
+		"data_bytes": [
+			"diagnosticSessionType"
+		]
+	},
+	"11": {
+		"service": "ECUReset",
+		"description": "used by the client to request a server reset.",
+		"serviceID": 17,
+		"type": "request",
+		"subfunction_supported": true,
+		"data_bytes": [
+			"resetType"
+		]
+	},
+	"14": {
+		"service": "ClearDiagnosticInformation",
+		"description": "used by the client to clear diagnostic information in one or multiple servers' memory.",
+		"serviceID": 20,
+		"type": "request",
+		"subfunction_supported": false,
+		"data_bytes": [
+			"groupOfDTC"
+		]
+	},
+	"19": {
+		"service": "ReadDTCInformation",
+		"description": "allows a client to read the status of server resident Diagnostic Trouble Code information from any server, or group of servers within a vehicle.",
+		"serviceID": 25,
+		"type": "multiRequest",
+		"subfunction_supported": true,
+		"parameters": {
+			"1": {
+				"data_bytes": [
+					"reportType",
+					"DTCStatusMask"
+				]
+			},
+			"2": {
+				"data_bytes": [
+					"reportType",
+					"DTCStatusMask"
+				]
+			},
+			"3": {
+				"data_bytes": [
+					"reportType",
+					"DTCMaskRecord",
+					"DTCSnapshotRecordNumber"
+				]
+			},
+			"4": {
+				"data_bytes": [
+					"reportType",
+					"DTCMaskRecord",
+					"DTCSnapshotRecordNumber"
+				]
+			},
+			"5": {
+				"data_bytes": [
+					"reportType",
+					"DTCStoredDataRecordNumber"
+				]
+			},
+			"6": {
+				"data_bytes": [
+					"reportType",
+					"DTCMaskRecord",
+					"DTCExtDataRecordNumber"
+				]
+			},
+			"7": {
+				"data_bytes": [
+					"reportType",
+					"DTCSeverityMask",
+					"DTCStatusMask"
+				]
+			},
+			"8": {
+				"data_bytes": [
+					"reportType",
+					"DTCSeverityMask",
+					"DTCStatusMask"
+				]
+			},
+			"9": {
+				"data_bytes": [
+					"reportType",
+					"DTCMaskRecord"
+				]
+			},
+			"10": {
+				"data_bytes": [
+					"reportType"
+				]
+			},
+			"11": {
+				"data_bytes": [
+					"reportType"
+				]
+			},
+			"12": {
+				"data_bytes": [
+					"reportType"
+				]
+			},
+			"13": {
+				"data_bytes": [
+					"reportType"
+				]
+			},
+			"14": {
+				"data_bytes": [
+					"reportType"
+				]
+			},
+			"15": {
+				"data_bytes": [
+					"reportType",
+					"DTCStatusMask"
+				]
+			},
+			"16": {
+				"data_bytes": [
+					"reportType",
+					"DTCMaskRecord",
+					"DTCExtDataRecordNumber"
+				]
+			},
+			"17": {
+				"data_bytes": [
+					"reportType",
+					"DTCStatusMask"
+				]
+			},
+			"18": {
+				"data_bytes": [
+					"reportType",
+					"DTCStatusMask"
+				]
+			},
+			"19": {
+				"data_bytes": [
+					"reportType",
+					"DTCStatusMask"
+				]
+			},
+			"20": {
+				"data_bytes": [
+					"reportType"
+				]
+			},
+			"21": {
+				"data_bytes": [
+					"reportType"
+				]
+			},
+			"22": {
+				"data_bytes": [
+					"reportType",
+					"DTCExtDataRecordNumber"
+				]
+			},
+			"23": {
+				"data_bytes": [
+					"reportType",
+					"DTCStatusMask",
+					"MemorySelection"
+				]
+			},
+			"24": {
+				"data_bytes": [
+					"reportType",
+					"DTCMaskRecord",
+					"DTCSnapshotRecordNumber",
+					"MemorySelection"
+				]
+			},
+			"25": {
+				"data_bytes": [
+					"reportType",
+					"DTCMaskRecord",
+					"DTCExtDataRecordNumber",
+					"MemorySelection"
+				]
+			},
+			"66": {
+				"data_bytes": [
+					"reportType",
+					"FunctionalGroupIdentifier",
+					"DTCStatusMask",
+					"DTCSeverityMask"
+				]
+			},
+			"55": {
+				"data_bytes": [
+					"reportType",
+					"FunctionalGroupIdentifier"
+				]
+			}
+		}
+	},
+	"22": {
+		"service": "ReadDataByIdentifier",
+		"description": "allows the client to request data record values from the server identified by one or more dataIdentifiers.",
+		"serviceID": 34,
+		"type": "request",
+		"subfunction_supported": false,
+		"data_bytes": [
+			"dataIdentifier*"
+		]
+	},
+	"23": {
+		"service": "ReadMemoryByAddress",
+		"description": "allows the client to request memory data from the server via provided starting address and size of memory to be read.",
+		"serviceID": 35,
+		"type": "request",
+		"subfunction_supported": false,
+		"data_bytes": [
+			"addressAndLengthFormatIdentifier",
+			"memoryAddress",
+			"memorySize"
+		]
+	},
+	"24": {
+		"service": "ReadScalingDataByIdentifier",
+		"description": "allows the client to request scaling data record information from the server identified by a dataIdentifier.",
+		"serviceID": 36,
+		"type": "request",
+		"subfunction_supported": false,
+		"data_bytes": [
+			"dataIdentifier"
+		]
+	},
+	"27": {
+		"service": "SecurityAccess",
+		"description": "provide a means to access data and/or diagnostic services, which have restricted access for security, emissions, or safety reasons.",
+		"serviceID": 39,
+		"type": "request",
+		"subfunction_supported": true,
+		"data_bytes": [
+			"securityAccessType",
+			"securityAccessDataOrKey"
+		]
+	},
+	"28": {
+		"service": "CommunicationControl",
+		"description": "switch on/off the transmission and/or the reception of certain messages of a server.",
+		"serviceID": 40,
+		"type": "request",
+		"subfunction_supported": true,
+		"data_bytes": [
+			"controlType",
+			"communicationType",
+			"nodeIdentificationNumber"
+		]
+	},
+	"2A": {
+		"service": "ReadDataByPeriodicIdentifier",
+		"description": "allows the client to request the periodic transmission of data record values from the server identified by one or more periodicDataIdentifiers.",
+		"serviceID": 42,
+		"type": "request",
+		"subfunction_supported": false,
+		"data_bytes": [
+			"transmissionMode",
+			"periodicDataIdentifier*"
+		]
+	},
+	"2C": {
+		"service": "DynamicallyDefineDataIdentifier",
+		"description": "allows the client to dynamically define in a server a data identifier that can be read via the ReadDataByIdentifier service at a later time.",
+		"serviceID": 44,
+		"type": "multiRequest",
+		"subfunction_supported": true,
+		"parameters": {
+			"1": {
+				"data_bytes": [
+					"definitionType",
+					"dynamicallyDefinedDataIdentifier",
+					"sourceDataIdentifier*",
+					"positionInSourceDataRecord*",
+					"memorySize*"
+				]
+			},
+			"2": {
+				"data_bytes": [
+					"definitionType",
+					"dynamicallyDefinedDataIdentifier",
+					"addressAndLengthFormatIdentifier",
+					"memoryAddress*",
+					"memorySize*"
+				]
+			},
+			"3": {
+				"data_bytes": [
+					"definitionType",
+					"dynamicallyDefinedDataIdentifier"
+				]
+			}
+		}
+	},
+	"2E": {
+		"service": "WriteDataByIdentifier",
+		"description": "allows the client to write information into the server at an internal location specified by the provided data identifier.",
+		"serviceID": 46,
+		"type": "request",
+		"subfunction_supported": false,
+		"data_bytes": [
+			"dataIdentifier",
+			"dataRecord*"
+		]
+	},
+	"2F": {
+		"service": "InputOutputControlByIdentifier",
+		"description": "used by the client to substitute a value for an input signal, internal server function and/or force control to a value for an output (actuator) of an electronic system.",
+		"serviceID": 47,
+		"type": "request",
+		"subfunction_supported": false,
+		"data_bytes": [
+			"dataIdentifier",
+			"controlOptionRecord",
+			"controlEnableMaskRecord"
+		]
+	},
+	"31": {
+		"service": "RoutineControl",
+		"description": "used by the client to execute a defined sequence of steps and obtain any relevant results.",
+		"serviceID": 49,
+		"type": "request",
+		"subfunction_supported": true,
+		"data_bytes": [
+			"routineControlType",
+			"routineIdentifier",
+			"routineControlOptionRecord"
+		]
+	},
+	"34": {
+		"service": "RequestDownload",
+		"description": "used by the client to initiate a data transfer from the client to the server (download).",
+		"serviceID": 52,
+		"type": "request",
+		"subfunction_supported": false,
+		"data_bytes": [
+			"dataFormatIdentifier1",
+			"addressAndLengthFormatIdentifier",
+			"memoryAddress",
+			"memorySize"
+		]
+	},
+	"35": {
+		"service": "RequestUpload",
+		"description": "used by the client to initiate a data transfer from the server to the client (upload).",
+		"serviceID": 53,
+		"type": "request",
+		"subfunction_supported": false,
+		"data_bytes": [
+			"dataFormatIdentifier1",
+			"addressAndLengthFormatIdentifier",
+			"memoryAddress",
+			"memorySize"
+		]
+	},
+	"36": {
+		"service": "TransferData",
+		"description": "used by the client to transfer data either from the client to the server (download) or from the server to the client (upload).",
+		"serviceID": 54,
+		"type": "request",
+		"subfunction_supported": false,
+		"data_bytes": [
+			"blockSequenceCounter",
+			"transferRequestParameterRecord"
+		]
+	},
+	"37": {
+		"service": "RequestTransferExit",
+		"description": "used by the client to terminate a data transfer between client and server (upload or download).",
+		"serviceID": 55,
+		"type": "request",
+		"subfunction_supported": false,
+		"data_bytes": [
+			"transferRequestParameterRecord"
+		]
+	},
+	"38": {
+		"service": "RequestFileTransfer",
+		"description": "used by the client to initiate a file data transfer from either the client to the server or from the server to the client (download or upload).",
+		"serviceID": 56,
+		"type": "request",
+		"subfunction_supported": false,
+		"data_bytes": [
+			"modeOfOperation",
+			"filePathAndNameLength",
+			"filePathAndName",
+			"dataFormatIdentifier2",
+			"fileSizeParameterLength",
+			"fileSizeUncompressed",
+			"fileSizeCompressed"
+		]
+	},
+	"3D": {
+		"service": "WriteMemoryByAddress",
+		"description": "allows the client to write information into the server at one or more contiguous memory locations.",
+		"serviceID": 61,
+		"type": "request",
+		"subfunction_supported": false,
+		"data_bytes": [
+			"addressAndLengthFormatIdentifier",
+			"memoryAddress",
+			"memorySize",
+			"dataRecord"
+		]
+	},
+	"3E": {
+		"service": "TesterPresent",
+		"description": "used to indicate to a server that a client is still connected to the vehicle and that certain diagnostic services and/or communication that have been previously activated are to remain active.",
+		"serviceID": 62,
+		"type": "request",
+		"subfunction_supported": true,
+		"data_bytes": [
+			"zeroSubFunction"
+		]
+	},
+	"50": {
+		"service": "DiagnosticSessionControl",
+		"description": "used to enable different diagnostic sessions in the server(s).",
+		"serviceID": 80,
+		"type": "response",
+		"subfunction_supported": false,
+		"data_bytes": [
+			"diagnosticSessionType",
+			"sessionParameterRecord"
+		]
+	},
+	"51": {
+		"service": "ECUReset",
+		"description": "used by the client to request a server reset.",
+		"serviceID": 81,
+		"type": "response",
+		"subfunction_supported": false,
+		"data_bytes": [
+			"resetType",
+			"powerDownTime"
+		]
+	},
+	"54": {
+		"service": "ClearDiagnosticInformation",
+		"description": "used by the client to clear diagnostic information in one or multiple servers' memory.",
+		"serviceID": 84,
+		"type": "response",
+		"subfunction_supported": false,
+		"data_bytes": [
+		]
+	},
+	"59": {
+		"service": "ReadDTCInformation",
+		"description": "allows a client to read the status of server resident Diagnostic Trouble Code information from any server, or group of servers within a vehicle.",
+		"serviceID": 89,
+		"type": "multiResponse",
+		"subfunction_supported": false,
+		"parameters": {
+			"1": {
+				"data_bytes": [
+					"reportType",
+					"DTCStatusAvailabilityMask",
+					"DTCFormatIdentifier",
+					"DTCCount"
+				]
+			},
+			"2": {
+				"data_bytes": [
+					"reportType",
+					"DTCStatusAvailabilityMask",
+					"DTCAndStatusRecord*"
+				]
+			},
+			"3": {
+				"data_bytes": [
+					"reportType",
+					"DTCRecord*",
+					"DTCSnapshotRecordNumber*"
+				]
+			},
+			"4": {
+				"data_bytes": [
+					"reportType",
+					"DTCAndStatusRecord",
+					"DTCSnapshotRecordNumber*",
+					"DTCSnapshotRecordNumberOfIdentifiers*",
+					"DTCSnapshotRecord*"
+				]
+			},
+			"5": {
+				"data_bytes": [
+					"reportType",
+					"DTCStoredDataRecordNumber*",
+					"DTCAndStatusRecord*",
+					"DTCStoredDataRecordNumberOfIdentifiers*",
+					"DTCStoredDataRecord*"
+				]
+			},
+			"6": {
+				"data_bytes": [
+					"reportType",
+					"DTCAndStatusRecord",
+					"DTCExtDataRecordNumber*",
+					"DTCExtDataRecord*"
+				]
+			},
+			"7": {
+				"data_bytes": [
+					"reportType",
+					"DTCStatusAvailabilityMask",
+					"DTCFormatIdentifier",
+					"DTCCount"
+				]
+			},
+			"8": {
+				"data_bytes": [
+					"reportType",
+					"DTCStatusAvailabilityMask",
+					"DTCAndSeverityRecord1*"
+				]
+			},
+			"9": {
+				"data_bytes": [
+					"reportType",
+					"DTCStatusAvailabilityMask",
+					"DTCAndSeverityRecord1*"
+				]
+			},
+			"10": {
+				"data_bytes": [
+					"reportType",
+					"DTCStatusAvailabilityMask",
+					"DTCAndStatusRecord*"
+				]
+			},
+			"11": {
+				"data_bytes": [
+					"reportType",
+					"DTCStatusAvailabilityMask",
+					"DTCAndStatusRecord*"
+				]
+			},
+			"12": {
+				"data_bytes": [
+					"reportType",
+					"DTCStatusAvailabilityMask",
+					"DTCAndStatusRecord*"
+				]
+			},
+			"13": {
+				"data_bytes": [
+					"reportType",
+					"DTCStatusAvailabilityMask",
+					"DTCAndStatusRecord*"
+				]
+			},
+			"14": {
+				"data_bytes": [
+					"reportType",
+					"DTCStatusAvailabilityMask",
+					"DTCAndStatusRecord*"
+				]
+			},
+			"15": {
+				"data_bytes": [
+					"reportType",
+					"DTCStatusAvailabilityMask",
+					"DTCAndStatusRecord*"
+				]
+			},
+			"16": {
+				"data_bytes": [
+					"reportType",
+					"DTCAndStatusRecord",
+					"DTCExtDataRecordNumber*",
+					"DTCExtDataRecord*"
+				]
+			},
+			"17": {
+				"data_bytes": [
+					"reportType",
+					"DTCStatusAvailabilityMask",
+					"DTCFormatIdentifier",
+					"DTCCount"
+				]
+			},
+			"18": {
+				"data_bytes": [
+					"reportType",
+					"DTCStatusAvailabilityMask",
+					"DTCFormatIdentifier",
+					"DTCCount"
+				]
+			},
+			"19": {
+				"data_bytes": [
+					"reportType",
+					"DTCStatusAvailabilityMask",
+					"DTCAndStatusRecord*"
+				]
+			},
+			"20": {
+				"data_bytes": [
+					"reportType",
+					"DTCFaultDetectionCounterRecord*"
+				]
+			},
+			"21": {
+				"data_bytes": [
+					"reportType",
+					"DTCStatusAvailabilityMask",
+					"DTCAndStatusRecord*"
+				]
+			},
+			"22": {
+				"data_bytes": [
+					"reportType",
+					"DTCExtDataRecordNumber",
+					"DTCAndStatusRecord*",
+					"DTCExtDataRecord*"
+				]
+			},
+			"23": {
+				"data_bytes": [
+					"reportType",
+					"MemorySelection",
+					"DTCStatusAvailabilityMask",
+					"DTCAndStatusRecord*"
+				]
+			},
+			"24": {
+				"data_bytes": [
+					"reportType",
+					"MemorySelection",
+					"DTCAndStatusRecord",
+					"DTCSnapshotRecordNumber*",
+					"DTCSnapshotRecordNumberOfIdentifiers*",
+					"DTCSnapshotRecord*"
+				]
+			},
+			"25": {
+				"data_bytes": [
+					"reportType",
+					"MemorySelection",
+					"DTCAndStatusRecord",
+					"DTCExtDataRecordNumber",
+					"DTCExtDataRecord*"
+				]
+			},
+			"66": {
+				"data_bytes": [
+					"reportType",
+					"FunctionalGroupIdentifier",
+					"DTCStatusAvailabilityMask",
+					"DTCSeverityAvailabilityMask",
+					"DTCFormatIdentifier",
+					"DTCAndSeverityRecord2*"
+				]
+			},
+			"85": {
+				"data_bytes": [
+					"reportType",
+					"FunctionalGroupIdentifier",
+					"DTCStatusAvailabilityMask",
+					"DTCFormatIdentifier",
+					"DTCAndStatusRecord*"
+				]
+			}
+		}
+	},
+	"62": {
+		"service": "ReadDataByIdentifier",
+		"description": "allows the client to request data record values from the server identified by one or more dataIdentifiers.",
+		"serviceID": 98,
+		"type": "response",
+		"subfunction_supported": false,
+		"data_bytes": [
+			"dataIdentifier*",
+			"dataRecord*"
+		]
+	},
+	"63": {
+		"service": "ReadMemoryByAddress",
+		"description": "allows the client to request memory data from the server via provided starting address and size of memory to be read.",
+		"serviceID": 99,
+		"type": "response",
+		"subfunction_supported": false,
+		"data_bytes": [
+			"dataRecord*"
+		]
+	},
+	"64": {
+		"service": "ReadScalingDataByIdentifier",
+		"description": "allows the client to request scaling data record information from the server identified by a dataIdentifier.",
+		"serviceID": 100,
+		"type": "response",
+		"subfunction_supported": false,
+		"data_bytes": [
+			"dataIdentifier",
+			"scalingByte*",
+			"scalingByteExtension*"
+		]
+	},
+	"67": {
+		"service": "SecurityAccess",
+		"description": "provide a means to access data and/or diagnostic services, which have restricted access for security, emissions, or safety reasons.",
+		"serviceID": 103,
+		"type": "response",
+		"subfunction_supported": false,
+		"data_bytes": [
+			"securityAccessType",
+			"securitySeed"
+		]
+	},
+	"68": {
+		"service": "CommunicationControl",
+		"description": "switch on/off the transmission and/or the reception of certain messages of a server.",
+		"serviceID": 104,
+		"type": "response",
+		"subfunction_supported": false,
+		"data_bytes": [
+			"controlType"
+		]
+	},
+	"6A": {
+		"service": "ReadDataByPeriodicIdentifier",
+		"description": "allows the client to request the periodic transmission of data record values from the server identified by one or more periodicDataIdentifiers.",
+		"serviceID": 106,
+		"type": "response",
+		"subfunction_supported": false,
+		"data_bytes": [
+		]
+	},
+	"6C": {
+		"service": "DynamicallyDefineDataIdentifier",
+		"description": "allows the client to dynamically define in a server a data identifier that can be read via the ReadDataByIdentifier service at a later time.",
+		"serviceID": 108,
+		"type": "response",
+		"subfunction_supported": false,
+		"data_bytes": [
+			"definitionType",
+			"dynamicallyDefinedDataIdentifier"
+		]
+	},
+	"6E": {
+		"service": "WriteDataByIdentifier",
+		"description": "allows the client to write information into the server at an internal location specified by the provided data identifier.",
+		"serviceID": 110,
+		"type": "response",
+		"subfunction_supported": false,
+		"data_bytes": [
+			"dataIdentifier"
+		]
+	},
+	"6F": {
+		"service": "InputOutputControlByIdentifier",
+		"description": "used by the client to substitute a value for an input signal, internal server function and/or force control to a value for an output (actuator) of an electronic system.",
+		"serviceID": 111,
+		"type": "response",
+		"subfunction_supported": false,
+		"data_bytes": [
+			"dataIdentifier",
+			"controlStatusRecord"
+		]
+	},
+	"71": {
+		"service": "RoutineControl",
+		"description": "used by the client to execute a defined sequence of steps and obtain any relevant results.",
+		"serviceID": 113,
+		"type": "response",
+		"subfunction_supported": false,
+		"data_bytes": [
+			"routineControlType",
+			"routineIdentifier",
+			"routineInfo",
+			"routineStatusRecord"
+		]
+	},
+	"74": {
+		"service": "RequestDownload",
+		"description": "used by the client to initiate a data transfer from the client to the server (download).",
+		"serviceID": 116,
+		"type": "response",
+		"subfunction_supported": false,
+		"data_bytes": [
+			"lengthFormatIdentifier",
+			"maxNumberOfBlockLength"
+		]
+	},
+	"75": {
+		"service": "RequestUpload",
+		"description": "used by the client to initiate a data transfer from the server to the client (upload).",
+		"serviceID": 117,
+		"type": "response",
+		"subfunction_supported": false,
+		"data_bytes": [
+			"lengthFormatIdentifier",
+			"maxNumberOfBlockLength"
+		]
+	},
+	"76": {
+		"service": "TransferData",
+		"description": "used by the client to transfer data either from the client to the server (download) or from the server to the client (upload).",
+		"serviceID": 118,
+		"type": "response",
+		"subfunction_supported": false,
+		"data_bytes": [
+			"blockSequenceCounter",
+			"transferResponseParameterRecord"
+		]
+	},
+	"77": {
+		"service": "RequestTransferExit",
+		"description": "used by the client to terminate a data transfer between client and server (upload or download).",
+		"serviceID": 119,
+		"type": "response",
+		"subfunction_supported": false,
+		"data_bytes": [
+			"transferResponseParameterRecord"
+		]
+	},
+	"78": {
+		"service": "RequestFileTransfer",
+		"description": "used by the client to initiate a file data transfer from either the client to the server or from the server to the client (download or upload).",
+		"serviceID": 120,
+		"type": "response",
+		"subfunction_supported": false,
+		"data_bytes": [
+			"modeOfOperation",
+			"lengthFormatIdentifier",
+			"maxNumberOfBlockLength",
+			"dataFormatIdentifier1",
+			"fileSizeOrDirInfoParameterLength",
+			"fileSizeUncompressedOrDirInfoLength",
+			"fileSizeCompressed"
+		]
+	},
+	"7D": {
+		"service": "WriteMemoryByAddress",
+		"description": "allows the client to write information into the server at one or more contiguous memory locations.",
+		"serviceID": 125,
+		"type": "response",
+		"subfunction_supported": false,
+		"data_bytes": [
+			"addressAndLengthFormatIdentifier",
+			"memoryAddress",
+			"memorySize"
+		]
+	},
+	"7E": {
+		"service": "TesterPresent",
+		"description": "used to indicate to a server that a client is still connected to the vehicle and that certain diagnostic services and/or communication that have been previously activated are to remain active.",
+		"serviceID": 126,
+		"type": "response",
+		"subfunction_supported": false,
+		"data_bytes": [
+			"zeroSubFunction"			
+		]
+	},
+	"83": {
+		"service": "AccessTimingParameter",
+		"description": "used to read and change the default timing parameters of a communication link for the duration this communication link is active.",
+		"serviceID": 131,
+		"type": "request",
+		"subfunction_supported": true,
+		"data_bytes": [
+			"timingParameterAccessType",
+			"timingParameterRequestRecord"
+		]
+	},
+	"84": {
+		"service": "SecuredDataTransmission",
+		"description": "used to transmit data that is protected against attacks from third parties - which could endanger data security.",
+		"serviceID": 132,
+		"type": "request",
+		"subfunction_supported": false,
+		"data_bytes": [
+			"securityDataRequestRecord"
+		]
+	},
+	"85": {
+		"service": "ControlDTCSetting",
+		"description": "used by a client to stop or resume the updating of DTC status bits in the server.",
+		"serviceID": 133,
+		"type": "request",
+		"subfunction_supported": true,
+		"data_bytes": [
+			"DTCSettingType",
+			"DTCSettingControlOptionRecord"
+		]
+	},
+	"86": {
+		"service": "ResponseOnEvent",
+		"description": "requests a server to start or stop transmission of responses on a specified event.",
+		"serviceID": 134,
+		"type": "request",
+		"subfunction_supported": true,
+		"data_bytes": [
+			"eventType",
+			"eventWindowTime",
+			"eventTypeRecord",
+			"serviceToRespondToRecord"
+		]
+	},
+	"87": {
+		"service": "LinkControl",
+		"description": "used to control the communication between the client and server in order to gain bus bandwidth for diagnostic purposes.",
+		"serviceID": 135,
+		"type": "multiRequest",
+		"subfunction_supported": true,
+		"parameters": {
+			"1": {
+				"data_bytes": [
+					"linkControlType",
+					"linkControlModeIdentifier"
+				]
+			},
+			"2": {
+				"data_bytes": [
+					"linkControlType",
+					"linkRecord"
+				]
+			},
+			"3": {
+				"data_bytes": [
+					"linkControlType"
+				]
+			}
+		}
+	},
+	"C3": {
+		"service": "AccessTimingParameter",
+		"description": "used to read and change the default timing parameters of a communication link for the duration this communication link is active.",
+		"serviceID": 195,
+		"type": "response",
+		"subfunction_supported": false,
+		"data_bytes": [
+			"timingParameterAccessType",
+			"timingParameterResponseRecord"
+		]
+	},
+	"C4": {
+		"service": "SecuredDataTransmission",
+		"description": "used to transmit data that is protected against attacks from third parties - which could endanger data security.",
+		"serviceID": 196,
+		"type": "response",
+		"subfunction_supported": false,
+		"data_bytes": [
+			"securityDataResponseRecord"
+		]
+	},
+	"C5": {
+		"service": "ControlDTCSetting",
+		"description": "used by a client to stop or resume the updating of DTC status bits in the server.",	
+		"serviceID": 197,
+		"type": "response",
+		"subfunction_supported": false,
+		"data_bytes": [
+			"DTCSettingType"			
+		]
+	},
+	"C6": {
+		"service": "ResponseOnEvent",
+		"description": "requests a server to start or stop transmission of responses on a specified event.",
+		"serviceID": 198,
+		"type": "multiResponse",
+		"subfunction_supported": false,
+		"parameters": {
+			"4": {
+				"data_bytes": [
+					"eventType",
+					"numberOfActivatedEvents",
+					"eventTypeOfActiveEvents*",
+					"eventWindowTime*",
+					"eventTypeRecord*",
+					"serviceToRespondToRecord*"
+				]
+			},
+			"others": {
+				"data_bytes": [
+					"eventType",
+					"numberOfIdentifiedEvents",
+					"eventWindowTime",
+					"eventTypeRecord",
+					"serviceToRespondToRecord"
+				]
+			}
+		}
+	},
+	"C7": {
+		"service": "LinkControl",
+		"description": "used to control the communication between the client and server in order to gain bus bandwidth for diagnostic purposes.",
+		"serviceID": 199,
+		"type": "response",
+		"subfunction_supported": false,
+		"data_bytes": [
+			"linkControlType"			
+		]
+	}
+}

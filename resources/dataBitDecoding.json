@@ -18273,5 +18273,17 @@
 		"1": "using extended tire pressure",
 		"2": "error",
 		"3": "not available"
+	},
+	"7037": {
+		"0": "override disabled",
+		"1": "speed control",
+		"2": "torque control",
+		"3": "speed/torque limit control"
+	},
+	"7038": {
+		"0": "highest priority",
+		"1": "high priority",
+		"2": "medium priority",
+		"3": "low priority"
 	}
 }

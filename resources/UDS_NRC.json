@@ -1,0 +1,1282 @@
+{
+	"00": {
+		"nrc": 0,
+		"name": "positiveResponse",
+		"description": "shall not be used in a negative response message."
+	},
+	"01": {
+		"nrc": 1,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"02": {
+		"nrc": 2,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"03": {
+		"nrc": 3,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"04": {
+		"nrc": 4,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"05": {
+		"nrc": 5,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"06": {
+		"nrc": 6,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"07": {
+		"nrc": 7,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"08": {
+		"nrc": 8,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"09": {
+		"nrc": 9,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"0A": {
+		"nrc": 10,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"0B": {
+		"nrc": 11,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"0C": {
+		"nrc": 12,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"0D": {
+		"nrc": 13,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"0E": {
+		"nrc": 14,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"0F": {
+		"nrc": 15,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"10": {
+		"nrc": 16,
+		"name": "generalReject",
+		"description": "indicates that the requested action has been rejected by the server."
+	},
+	"11": {
+		"nrc": 17,
+		"name": "serviceNotSupported",
+		"description": "the server does not support the requested service."
+	},
+	"12": {
+		"nrc": 18,
+		"name": "sub-functionNotSupported",
+		"description": "the server does not support the service specific parameters of the request message."
+	},
+	"13": {
+		"nrc": 19,
+		"name": "incorrectMessageLengthOrInvalidFormat",
+		"description": "the length of the received request message does not match the prescribed length for the specified service or the format does not match."
+	},
+	"14": {
+		"nrc": 20,
+		"name": "responseTooLong",
+		"description": "the response to be generated exceeds the maximum number of bytes available by the underlying network layer."
+	},
+	"15": {
+		"nrc": 21,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"16": {
+		"nrc": 22,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"17": {
+		"nrc": 23,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"18": {
+		"nrc": 24,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"19": {
+		"nrc": 25,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"1A": {
+		"nrc": 26,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"1B": {
+		"nrc": 27,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"1C": {
+		"nrc": 28,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"1D": {
+		"nrc": 29,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"1E": {
+		"nrc": 30,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"1F": {
+		"nrc": 31,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"20": {
+		"nrc": 32,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"21": {
+		"nrc": 33,
+		"name": "busyRepeatRequest",
+		"description": "the server is temporarily too busy to perform the requested operation."
+	},
+	"22": {
+		"nrc": 34,
+		"name": "conditionsNotCorrect",
+		"description": "the server prerequisite conditions are not met."
+	},
+	"23": {
+		"nrc": 35,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"24": {
+		"nrc": 36,
+		"name": "requestSequenceError",
+		"description": "the server expects a different sequence of request messages or message as sent by the client."
+	},
+	"25": {
+		"nrc": 37,
+		"name": "noResponseFromSubnetComponent",
+		"description": "the server has received the request but the requested action could not be performed by the server as a subnet component which is necessary to supply the requested info did not respond within the specified time."
+	},
+	"26": {
+		"nrc": 38,
+		"name": "failurePreventsExecutionOfRequestedAction",
+		"description": "a failure condition, identified by a DTC, has occured and that this failure condition prevents the server from performing the requested action."
+	},
+	"27": {
+		"nrc": 39,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"28": {
+		"nrc": 40,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"29": {
+		"nrc": 41,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"2A": {
+		"nrc": 42,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"2B": {
+		"nrc": 43,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"2C": {
+		"nrc": 44,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"2D": {
+		"nrc": 45,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"2E": {
+		"nrc": 46,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"2F": {
+		"nrc": 47,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"30": {
+		"nrc": 48,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"31": {
+		"nrc": 49,
+		"name": "requestOutOfRange",
+		"description": "the server has detected that the request message contains a parameter which attempts to substitute a value beyond its range of authority, or which attempts to access a dataIdentifier/routineIdentifier that is not supported or not supported in active session."
+	},
+	"32": {
+		"nrc": 50,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"33": {
+		"nrc": 51,
+		"name": "securityAccessDenied",
+		"description": "the server's security strategy has not been satisifed by the client."
+	},
+	"34": {
+		"nrc": 52,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"35": {
+		"nrc": 53,
+		"name": "invalidKey",
+		"description": "the server has not given security access because the key sent by the client did not match with the key in the server's memory."
+	},
+	"36": {
+		"nrc": 54,
+		"name": "exceedNumberOfAttempts",
+		"description": "the client has unsuccessfully attempted to gain security access more times than the server's security strategy will allow."
+	},
+	"37": {
+		"nrc": 55,
+		"name": "requiredTimeDelayNotExpired",
+		"description": "the client's latest attempt to gain security access was initiated before the server's required timeout period had elapsed."
+	},
+	"38": {
+		"nrc": 56,
+		"name": "reservedByExtendedDataLinkSecurityDocument",
+		"description": "reserved by extended data link security."
+	},
+	"39": {
+		"nrc": 57,
+		"name": "reservedByExtendedDataLinkSecurityDocument",
+		"description": "reserved by extended data link security."
+	},
+	"3A": {
+		"nrc": 58,
+		"name": "reservedByExtendedDataLinkSecurityDocument",
+		"description": "reserved by extended data link security."
+	},
+	"3B": {
+		"nrc": 59,
+		"name": "reservedByExtendedDataLinkSecurityDocument",
+		"description": "reserved by extended data link security."
+	},
+	"3C": {
+		"nrc": 60,
+		"name": "reservedByExtendedDataLinkSecurityDocument",
+		"description": "reserved by extended data link security."
+	},
+	"3D": {
+		"nrc": 61,
+		"name": "reservedByExtendedDataLinkSecurityDocument",
+		"description": "reserved by extended data link security."
+	},
+	"3E": {
+		"nrc": 62,
+		"name": "reservedByExtendedDataLinkSecurityDocument",
+		"description": "reserved by extended data link security."
+	},
+	"3F": {
+		"nrc": 63,
+		"name": "reservedByExtendedDataLinkSecurityDocument",
+		"description": "reserved by extended data link security."
+	},
+	"40": {
+		"nrc": 64,
+		"name": "reservedByExtendedDataLinkSecurityDocument",
+		"description": "reserved by extended data link security."
+	},
+	"41": {
+		"nrc": 65,
+		"name": "reservedByExtendedDataLinkSecurityDocument",
+		"description": "reserved by extended data link security."
+	},
+	"42": {
+		"nrc": 66,
+		"name": "reservedByExtendedDataLinkSecurityDocument",
+		"description": "reserved by extended data link security."
+	},
+	"43": {
+		"nrc": 67,
+		"name": "reservedByExtendedDataLinkSecurityDocument",
+		"description": "reserved by extended data link security."
+	},
+	"44": {
+		"nrc": 68,
+		"name": "reservedByExtendedDataLinkSecurityDocument",
+		"description": "reserved by extended data link security."
+	},
+	"45": {
+		"nrc": 69,
+		"name": "reservedByExtendedDataLinkSecurityDocument",
+		"description": "reserved by extended data link security."
+	},
+	"46": {
+		"nrc": 70,
+		"name": "reservedByExtendedDataLinkSecurityDocument",
+		"description": "reserved by extended data link security."
+	},
+	"47": {
+		"nrc": 71,
+		"name": "reservedByExtendedDataLinkSecurityDocument",
+		"description": "reserved by extended data link security."
+	},
+	"48": {
+		"nrc": 72,
+		"name": "reservedByExtendedDataLinkSecurityDocument",
+		"description": "reserved by extended data link security."
+	},
+	"49": {
+		"nrc": 73,
+		"name": "reservedByExtendedDataLinkSecurityDocument",
+		"description": "reserved by extended data link security."
+	},
+	"4A": {
+		"nrc": 74,
+		"name": "reservedByExtendedDataLinkSecurityDocument",
+		"description": "reserved by extended data link security."
+	},
+	"4B": {
+		"nrc": 75,
+		"name": "reservedByExtendedDataLinkSecurityDocument",
+		"description": "reserved by extended data link security."
+	},
+	"4C": {
+		"nrc": 76,
+		"name": "reservedByExtendedDataLinkSecurityDocument",
+		"description": "reserved by extended data link security."
+	},
+	"4D": {
+		"nrc": 77,
+		"name": "reservedByExtendedDataLinkSecurityDocument",
+		"description": "reserved by extended data link security."
+	},
+	"4E": {
+		"nrc": 78,
+		"name": "reservedByExtendedDataLinkSecurityDocument",
+		"description": "reserved by extended data link security."
+	},
+	"4F": {
+		"nrc": 79,
+		"name": "reservedByExtendedDataLinkSecurityDocument",
+		"description": "reserved by extended data link security."
+	},
+	"50": {
+		"nrc": 80,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"51": {
+		"nrc": 81,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"52": {
+		"nrc": 82,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"53": {
+		"nrc": 84,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"54": {
+		"nrc": 84,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"55": {
+		"nrc": 85,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"56": {
+		"nrc": 86,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"57": {
+		"nrc": 87,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"58": {
+		"nrc": 88,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"59": {
+		"nrc": 89,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"5A": {
+		"nrc": 90,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"5B": {
+		"nrc": 91,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"5C": {
+		"nrc": 92,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"5D": {
+		"nrc": 93,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"5E": {
+		"nrc": 94,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"5F": {
+		"nrc": 95,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"60": {
+		"nrc": 96,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"61": {
+		"nrc": 97,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"62": {
+		"nrc": 98,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"63": {
+		"nrc": 99,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"64": {
+		"nrc": 100,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"65": {
+		"nrc": 101,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"66": {
+		"nrc": 102,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"67": {
+		"nrc": 103,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"68": {
+		"nrc": 104,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"69": {
+		"nrc": 105,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"6A": {
+		"nrc": 106,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"6B": {
+		"nrc": 107,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"6C": {
+		"nrc": 108,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"6D": {
+		"nrc": 109,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"6E": {
+		"nrc": 110,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"6F": {
+		"nrc": 111,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"70": {
+		"nrc": 112,
+		"name": "uploadDownloadNotAccepted",
+		"description": "indicates that an attempt to upload or download to a server's memory cannot be accomplished due to some fault conditions."
+	},
+	"71": {
+		"nrc": 113,
+		"name": "transferDataSuspended",
+		"description": "indicates that a data transfer operation was halted due to some fault."
+	},	
+	"72": {
+		"nrc": 114,
+		"name": "generalProgrammingFailure",
+		"description": "the server detected an error when erasing or programming a memory location in the permanent memory device."
+	},
+	"73": {
+		"nrc": 115,
+		"name": "wrongBlockSequenceCounter",
+		"description": "the server detected an error in the sequence of blockSequenceCounter values."
+	},	
+	"74": {
+		"nrc": 116,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"75": {
+		"nrc": 117,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"76": {
+		"nrc": 118,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"77": {
+		"nrc": 119,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"78": {
+		"nrc": 120,
+		"name": "requestCorrectlyReceived-ResponsePending",
+		"description": "the request message was received correctly, and that all parameters in the request message were valid, but the action to be performed is not yet completed and the server is not yet ready to receive another request."
+	},
+	"79": {
+		"nrc": 121,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"7A": {
+		"nrc": 122,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"7B": {
+		"nrc": 123,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"7C": {
+		"nrc": 124,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"7D": {
+		"nrc": 125,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"7E": {
+		"nrc": 126,
+		"name": "sub-functionNotSupportedInActiveSession",
+		"description": "the server does not support the requested sub-function in the session currently active."
+	},
+	"7F": {
+		"nrc": 127,
+		"name": "serviceNotSupportedInActiveSession",
+		"description": "the server does not support the requestd service in the session currently active."
+	},
+	"80": {
+		"nrc": 128,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"81": {
+		"nrc": 129,
+		"name": "rpmTooHigh",
+		"description": "the server prerequisite condition for RPM is too high."
+	},
+	"82": {
+		"nrc": 130,
+		"name": "rpmTooLow",
+		"description": "the server prerequisite condition for RPM is too low."
+	},
+	"83": {
+		"nrc": 131,
+		"name": "engineIsRunning",
+		"description": "required for those actuator tests which cannot be actuated while the engine is running."
+	},
+	"84": {
+		"nrc": 132,
+		"name": "engineIsNotRunning",
+		"description": "required for those actuator tests which cannot be actuated unless the engine is running."
+	},
+	"85": {
+		"nrc": 133,
+		"name": "engineRunTimeTooLow",
+		"description": "the server prerequisite condition for engine run time is not met (too low)."
+	},
+	"86": {
+		"nrc": 134,
+		"name": "temperatureTooHigh",
+		"description": "the server prerequisite condition for temperature is not met (too high)."
+	},
+	"87": {
+		"nrc": 135,
+		"name": "temperatureTooLow",
+		"description": "the server prerequisite condition for temperature is not met (too low)."
+	},
+	"88": {
+		"nrc": 136,
+		"name": "vehicleSpeedTooHigh",
+		"description": "the server prerequisite condition for vehicle speed is not met (too high)."
+	},
+	"89": {
+		"nrc": 137,
+		"name": "vehicleSpeedTooLow",
+		"description": "the server prerequisite condition for vehicle speed is not met (too low)."
+	},
+	"8A": {
+		"nrc": 138,
+		"name": "throttle/PedalTooHigh",
+		"description": "the server prerequisite condition for thottle/pedal position is not met (too high)."
+	},
+	"8B": {
+		"nrc": 139,
+		"name": "throttle/PedalTooLow",
+		"description": "the server prerequisite condition for thottle/pedal position is not met (too low)."
+	},
+	"8C": {
+		"nrc": 140,
+		"name": "transmissionRangeNotInNeutral",
+		"description": "the server prerequisite condition for being in neutral is not met."
+	},
+	"8D": {
+		"nrc": 141,
+		"name": "transmissionRangeNotInGear",
+		"description": "the server prerequisite condition for being in gear is not met."
+	},
+	"8E": {
+		"nrc": 142,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	},
+	"8F": {
+		"nrc": 143,
+		"name": "brakeSwitch(es)NotClosed",
+		"description": "for safety reasons, the brake pedal must not be pressed for certain tests before it begins."
+	},
+	"90": {
+		"nrc": 144,
+		"name": "shifterLeverNotInPark",
+		"description": "for safety reasons, shifter must be in park for certains tests before it begins."
+	},	
+	"91": {
+		"nrc": 145,
+		"name": "torqueConverterClutchLocked",
+		"description": "the server prerequisite condition for torque converter clutch is not met."
+	},
+	"92": {
+		"nrc": 146,
+		"name": "voltageTooHigh",
+		"description": "the server prerequisite condition for voltage at the primary pin of the server is not met (too high)."
+	},	
+	"93": {
+		"nrc": 147,
+		"name": "voltageTooLow",
+		"description": "the server prerequisite condition for voltage at the primary pin of the server is not met (too high)."
+	},
+	"94": {
+		"nrc": 148,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"95": {
+		"nrc": 149,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"96": {
+		"nrc": 150,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"97": {
+		"nrc": 151,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"98": {
+		"nrc": 152,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"99": {
+		"nrc": 153,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"9A": {
+		"nrc": 154,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"9B": {
+		"nrc": 155,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"9C": {
+		"nrc": 156,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"9D": {
+		"nrc": 157,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"9E": {
+		"nrc": 158,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"9F": {
+		"nrc": 159,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"A0": {
+		"nrc": 160,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"A1": {
+		"nrc": 161,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"A2": {
+		"nrc": 162,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"A3": {
+		"nrc": 163,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"A4": {
+		"nrc": 164,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"A5": {
+		"nrc": 165,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"A6": {
+		"nrc": 166,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"A7": {
+		"nrc": 167,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"A8": {
+		"nrc": 168,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"A9": {
+		"nrc": 169,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"AA": {
+		"nrc": 170,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"AB": {
+		"nrc": 171,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"AC": {
+		"nrc": 172,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"AD": {
+		"nrc": 173,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"AE": {
+		"nrc": 174,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"AF": {
+		"nrc": 175,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"B0": {
+		"nrc": 176,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"B1": {
+		"nrc": 177,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"B2": {
+		"nrc": 178,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"B3": {
+		"nrc": 179,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"B4": {
+		"nrc": 180,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"B5": {
+		"nrc": 181,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"B6": {
+		"nrc": 182,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"B7": {
+		"nrc": 183,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"B8": {
+		"nrc": 184,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"B9": {
+		"nrc": 185,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"BA": {
+		"nrc": 186,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"BB": {
+		"nrc": 187,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"BC": {
+		"nrc": 188,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"BD": {
+		"nrc": 189,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"BE": {
+		"nrc": 190,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"BF": {
+		"nrc": 191,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"C0": {
+		"nrc": 192,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"C1": {
+		"nrc": 193,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"C2": {
+		"nrc": 194,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"C3": {
+		"nrc": 195,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"C4": {
+		"nrc": 196,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"C5": {
+		"nrc": 197,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"C6": {
+		"nrc": 198,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"C7": {
+		"nrc": 199,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"C8": {
+		"nrc": 200,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"C9": {
+		"nrc": 201,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"CA": {
+		"nrc": 202,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"CB": {
+		"nrc": 203,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"CC": {
+		"nrc": 204,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"CD": {
+		"nrc": 205,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"CE": {
+		"nrc": 206,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"CF": {
+		"nrc": 207,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"D0": {
+		"nrc": 208,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"D1": {
+		"nrc": 209,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"D2": {
+		"nrc": 210,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"D3": {
+		"nrc": 211,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"D4": {
+		"nrc": 212,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"D5": {
+		"nrc": 213,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"D6": {
+		"nrc": 214,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"D7": {
+		"nrc": 215,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"D8": {
+		"nrc": 216,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"D9": {
+		"nrc": 217,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"DA": {
+		"nrc": 218,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"DB": {
+		"nrc": 219,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"DC": {
+		"nrc": 220,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"DD": {
+		"nrc": 221,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"DE": {
+		"nrc": 222,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"DF": {
+		"nrc": 223,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"E0": {
+		"nrc": 224,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"E1": {
+		"nrc": 225,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"E2": {
+		"nrc": 226,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"E3": {
+		"nrc": 227,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"E4": {
+		"nrc": 228,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"E5": {
+		"nrc": 229,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"E6": {
+		"nrc": 230,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"E7": {
+		"nrc": 231,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"E8": {
+		"nrc": 232,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"E9": {
+		"nrc": 233,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"EA": {
+		"nrc": 234,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"EB": {
+		"nrc": 235,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"EC": {
+		"nrc": 236,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"ED": {
+		"nrc": 237,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"EE": {
+		"nrc": 238,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"EF": {
+		"nrc": 239,
+		"name": "reservedForSpecificConditionsNotCorrect",
+		"description": "reserved by the document for future definition."
+	},
+	"F0": {
+		"nrc": 240,
+		"name": "vehicleManufacturerSpecificConditionsNotCorrect",
+		"description": "reserved for vehicle manufacturer specific condition not correct scenarios."
+	},
+	"F1": {
+		"nrc": 241,
+		"name": "vehicleManufacturerSpecificConditionsNotCorrect",
+		"description": "reserved for vehicle manufacturer specific condition not correct scenarios."
+	},
+	"F2": {
+		"nrc": 242,
+		"name": "vehicleManufacturerSpecificConditionsNotCorrect",
+		"description": "reserved for vehicle manufacturer specific condition not correct scenarios."
+	},
+	"F3": {
+		"nrc": 243,
+		"name": "vehicleManufacturerSpecificConditionsNotCorrect",
+		"description": "reserved for vehicle manufacturer specific condition not correct scenarios."
+	},
+	"F4": {
+		"nrc": 244,
+		"name": "vehicleManufacturerSpecificConditionsNotCorrect",
+		"description": "reserved for vehicle manufacturer specific condition not correct scenarios."
+	},
+	"F5": {
+		"nrc": 245,
+		"name": "vehicleManufacturerSpecificConditionsNotCorrect",
+		"description": "reserved for vehicle manufacturer specific condition not correct scenarios."
+	},
+	"F6": {
+		"nrc": 246,
+		"name": "vehicleManufacturerSpecificConditionsNotCorrect",
+		"description": "reserved for vehicle manufacturer specific condition not correct scenarios."
+	},
+	"F7": {
+		"nrc": 247,
+		"name": "vehicleManufacturerSpecificConditionsNotCorrect",
+		"description": "reserved for vehicle manufacturer specific condition not correct scenarios."
+	},
+	"F8": {
+		"nrc": 248,
+		"name": "vehicleManufacturerSpecificConditionsNotCorrect",
+		"description": "reserved for vehicle manufacturer specific condition not correct scenarios."
+	},
+	"F9": {
+		"nrc": 249,
+		"name": "vehicleManufacturerSpecificConditionsNotCorrect",
+		"description": "reserved for vehicle manufacturer specific condition not correct scenarios."
+	},
+	"FA": {
+		"nrc": 250,
+		"name": "vehicleManufacturerSpecificConditionsNotCorrect",
+		"description": "reserved for vehicle manufacturer specific condition not correct scenarios."
+	},
+	"FB": {
+		"nrc": 251,
+		"name": "vehicleManufacturerSpecificConditionsNotCorrect",
+		"description": "reserved for vehicle manufacturer specific condition not correct scenarios."
+	},
+	"FC": {
+		"nrc": 252,
+		"name": "vehicleManufacturerSpecificConditionsNotCorrect",
+		"description": "reserved for vehicle manufacturer specific condition not correct scenarios."
+	},
+	"FD": {
+		"nrc": 253,
+		"name": "vehicleManufacturerSpecificConditionsNotCorrect",
+		"description": "reserved for vehicle manufacturer specific condition not correct scenarios."
+	},
+	"FE": {
+		"nrc": 254,
+		"name": "vehicleManufacturerSpecificConditionsNotCorrect",
+		"description": "reserved for vehicle manufacturer specific condition not correct scenarios."
+	},
+	"FF": {
+		"nrc": 255,
+		"name": "ISOSAEReserved",
+		"description": "reserved by this document for future definition."
+	}
+}

@@ -2337,7 +2337,7 @@
         "pgnDescription": "See document J1939-21 for PGN details.",
         "multipacket": "No",
         "transmissionRate": "variable",
-        "pgnDataLength": "variable",
+        "pgnDataLength": 8,
         "defaultPriority": "",
         "spnList": [
             2572,
@@ -2351,25 +2351,15 @@
         "pgnDescription": "See document J1939-21 for PGN details.",
         "multipacket": "No",
         "transmissionRate": "variable",
-        "pgnDataLength": "variable",
+        "pgnDataLength": 8,
         "defaultPriority": "",
         "spnList": [
+			2556,
             2557,
             2558,
             2559,
             2560,
-            2561,
-            2562,
-            2563,
-            2564,
-            2565,
-            2566,
-            2567,
-            2568,
-            2569,
-            2570,
-            2571,
-            2556
+            2562
         ]
     },
     "60672": {
