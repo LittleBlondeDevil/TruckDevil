@@ -6,6 +6,7 @@ import math
 import copy
 import json
 import os
+import binascii
 
 class TruckDevil:
     def __init__(self, port=None, serial_baud=115200, can_baud=0):
@@ -208,7 +209,10 @@ class TruckDevil:
                 '\n'
             )
             if (message.pgn == 0xDA00):
-                decoded += self._UDSDecode(message)
+                try:
+                    decoded += self._UDSDecode(message)
+                except (ValueError, UnboundLocalError):
+                    decoded += '      Cannot decode UDS message, incorrect form'
                 return decoded
             decoded += (
                 '      PGNDataLength: ' + 
@@ -257,15 +261,29 @@ class TruckDevil:
                                         self._bit_decoding_list[str(spn)][str(extracted_data)] + 
                                         '\n'
                                     )
-                                # If not bit type, calculate value
+                                #if ascii data type, convert 
+                                elif(self._spn_list[str(spn)]['units'] == 'ASCII'):
+                                    try:
+                                        to_ascii = extracted_data.to_bytes(len(bin_data[start:end+1]) // 8, byteorder='big')
+                                        decoded += (
+                                            '        ' + bin_data[start:end+1] + 
+                                            ' : ' + str(to_ascii, 'latin-1') + 
+                                            '\n'
+                                        )
+                                    except UnicodeDecodeError:
+                                        continue
+                                # If anything else, calculate value    
                                 else: 
                                     # Multiply by the resolution and add offset to get appropriate range
-                                    extracted_data = (
-                                        (extracted_data * 
-                                        (self._spn_list[str(spn)]['resolutionNumerator'] / 
-                                        self._spn_list[str(spn)]['resolutionDenominator'])) + 
-                                        self._spn_list[str(spn)]['offset'] 
-                                    )
+                                    try:
+                                        extracted_data = (
+                                            (extracted_data * 
+                                            (self._spn_list[str(spn)]['resolutionNumerator'] / 
+                                            self._spn_list[str(spn)]['resolutionDenominator'])) + 
+                                            self._spn_list[str(spn)]['offset'] 
+                                        )
+                                    except TypeError:
+                                        continue
                                     if (extracted_data.is_integer()): 
                                         extracted_data = str(int(extracted_data))
                                     else:
@@ -1210,7 +1228,11 @@ class TruckDevil:
                 self._UDS_NRC_list[uds_data[2:4]]['description'] + '\n'
             )
             return decoded
-        service = copy.deepcopy(self._UDS_services_list[serviceID])
+        try:
+            service = copy.deepcopy(self._UDS_services_list[serviceID])
+        except KeyError:
+            return decoded + '      UDS Service ID ' + str(serviceID) + ' does not exist\n'
+            
         decoded += '      PGNDataLength: ' + str(size + 1) + '\n'
         decoded += '      UDS service: ' + service['service']
         if (service['type'] == 'request' or service['type'] == 'response'):
@@ -1280,7 +1302,10 @@ class TruckDevil:
                 else:
                     func_data = (uds_data[data_index*2:function['numBytes']*2 
                                 + data_index*2])
-                    val = function['parameters'][str(int(func_data, 16))]
+                    try:
+                        val = function['parameters'][str(int(func_data, 16))]
+                    except KeyError:
+                        val = 'cannot decode value (out of range)'
                 decoded += '            value: ' + val + '\n'
                 if (func_name == 'modeOfOperation'):
                     tempModeOfOperation = val
