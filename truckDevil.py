@@ -9,6 +9,13 @@ import os
 import binascii
 
 class TruckDevil:
+    """
+    Contains various functions for handling J1939 messages
+
+    :param port: serial port that M2 is connected on. Example: COMX, dev/ttyX
+    :param serial_baud: baudrate to connect over serial to M2 (Default value = 115200)
+    :param can_baud: baudrate on the CAN bus. Most common are 250000 and 500000. Use 0 for autobaud detection. (Default value = 0)
+    """
     def __init__(self, port=None, serial_baud=115200, can_baud=0):
         if (port == None):
             raise Exception('No device port specified')
@@ -72,18 +79,18 @@ class TruckDevil:
         baudToSend = str(can_baud).zfill(7) 
         self._m2.write(baudToSend.encode('utf-8'))
         
-    '''
-    Close the Serial connection to M2.
-    '''
+    
     def done(self):
+        """Close the Serial connection to M2."""
         with self._lockM2:
             self._m2.close()
-    '''    
-    starts reading and storing messages
-    abstractTPM: whether to abstract multipacket messages or instead to 
-                 show all Transport Protocol messages(default is True)
-    '''
+    
     def startDataCollection(self, abstractTPM=True):
+        """
+        Starts reading and storing messages
+
+        :param abstractTPM: whether to abstract multipacket messages or instead to show all Transport Protocol messages (Default value = True)
+        """
         if (self._dataCollectionOccurring == True):
             raise Exception('data collection already started')
         with self._lockCollectedMessages:
@@ -99,19 +106,23 @@ class TruckDevil:
             
         self._dataCollectionOccurring = True
             
-    '''
-    Return the collectedMessages list
-    '''
+    
     def getCurrentCollectedData(self):
+        """
+        Gets all of the messages that have been collected
+
+        :return: the collectedMessages list
+        """
         with self._lockCollectedMessages:
             messages = self._collectedMessages
         return messages
         
-    '''
-    Stops reading and storing messages, resets all data
-    returns the collectedMessages list
-    '''
     def stopDataCollection(self):
+        """
+        Stops reading and storing messages, resets all data
+
+        :returns: the collectedMessages list
+        """
         if (self._dataCollectionOccurring == False):
             raise Exception('data collection is already stopped')
         self._dataCollectionOccurring = False
@@ -124,14 +135,16 @@ class TruckDevil:
             self._collectedMessages = []
         return dataCollected
         
-    '''
-    save the collected messages to a file
-    messages: the collected messages outputted from stopDataCollection
-    fileName: optional, the name of the file to save the data to
-    verbose: optional, true in order to save the message in decoded form
-    '''
+    
     def saveDataCollected(self, messages, 
                           fileName=None, verbose=False):
+        """
+        Save the collected messages to a file
+
+        :param messages: the collected messages outputted from stopDataCollection
+        :param fileName: the name of the file to save the data to. If not specified, defaults to: "m2_collected_data_[time]"
+        :param verbose: whether or not to save the message in decoded form (Default value = False)
+        """
         # If given messages list is empty
         if (len(messages) == 0): 
             raise Exception('messages list is empty')
@@ -147,12 +160,14 @@ class TruckDevil:
         f.close()    
     
     
-    '''
-    Take in file previously saved by saveDataCollected, 
-    returns corresponding list containing J1939_Message objects
-    fileName: the name of the file where the data is saved
-    '''
+    
     def importDataCollected(self, fileName):
+        """
+        Converts log file to list of J1939_Message objects
+
+        :param fileName: the name of the file where the data is saved
+        :returns: list of J1939_Message objects from log file
+        """
         messages = []
         if (os.path.exists(fileName)):
             with open (fileName, 'r') as inFile:
@@ -177,13 +192,14 @@ class TruckDevil:
         else:
             raise Exception('file name given does not exist.')
     
-    '''
-    Takes a J1939_Message object and returns a string containing the 
-    decoded version of the message
-    message: J1939_Message object to be decoded, required
-    returns decodedMessage
-    '''
+    
     def getDecodedMessage(self, message=None):
+        """
+        Decodes a J1939_Message object into human-readable string
+
+        :param message: J1939_Message object to be decoded
+        :returns: the decoded message as a string
+        """
         if (isinstance(message, J1939_Message) == False or 
                 message == None):
             raise Exception('Must include an instance of a J1939_Message')
@@ -300,22 +316,18 @@ class TruckDevil:
         return decoded
     
          
-    '''
-    Read and print all messages from M2. If readTime and numMessages 
-    are both specified, stop printing when whichever one is reached 
-    first.
-    abstractTPM: whether to abstract multipacket messages or instead 
-                 to show all Transport Protocol messages(default is True)
-    readTime: optional argument, the amount of time to print messages 
-                 for. If not specified, it will not be limited
-    numMessages: number of messages to print before stopping. 
-                 If not specified, it will not be limited
-    verbose: optional, true in order to print the message in decoded 
-             form (uses getDecodedMessage)
-    '''
     def printMessages(self, abstractTPM=True, 
                       readTime=None, numMessages=None, 
                       verbose=False, logToFile=False):
+        """
+        Read and print all messages from M2. If readTime and numMessages are both specified, stop printing when whichever one is reached first.
+        
+        :param abstractTPM: whether to abstract multipacket messages or instead to show all Transport Protocol messages (Default value = True)
+        :param readTime: the amount of time to print messages for. If not specified, it will not be limited
+        :param numMessages: number of messages to print before stopping. If not specified, it will not be limited
+        :param verbose: whether or not to print the message in decoded form (Default value = False)
+        :param logToFile: whether or not to log the messages to a file (Default value = False)
+        """
         # Only allow if data collection is not occurring
         if (self._dataCollectionOccurring == True): 
             raise Exception('stop data collection before proceeding with this function')
@@ -577,23 +589,18 @@ class TruckDevil:
         if (readTime != None):
             self._printMessagesTimer.cancel()
     
-    '''
-    Read all messages from M2 until a specific message is found, 
-    atleast one parameter should be specified to look for.
-    dataContains: optional, if specified, the message must contain 
-                  this hex string in the data portion, ex: "010203"
-    src_addr: optional, if specified, the message must have a 
-              src_addr of this parameter, ex: 0xF9
-    dst_addr: optional, if specified, the message must have a 
-              dst_addr of this parameter, ex: 0x0B
-    pgn: optional, if specified, the message must have a pgn of 
-         this parameter, ex: 0xF004
-    Returns both the message that matched the specified parameters, 
-    and the list of messages that were collected.
-    '''
     def readMessagesUntil(self, dataContains=None, 
                           target_src_addr=None, target_dst_addr=None, 
                           target_pgn=None):
+        """
+        Read all messages from M2 until a specific message is found, atleast one parameter should be specified to look for.
+
+        :param dataContains: if specified, the message must contain this hex string in the data portion, ex: "010203"
+        :param target_src_addr: if specified, the message must have a src_addr of this parameter, ex: 0xF9
+        :param target_dst_addr: if specified, the message must have a dst_addr of this parameter, ex: 0x0B
+        :param target_pgn: if specified, the message must have a pgn of this parameter, ex: 0xF004
+        :returns: both the message that matched the specified parameters, and the list of messages that were collected while searching
+        """
         if (dataContains==None and 
                 target_src_addr==None and 
                 target_dst_addr==None and 
@@ -774,11 +781,13 @@ class TruckDevil:
                     (target_pgn==None or message.pgn==target_pgn)):
                 return message, collectedMessages
         
-    '''
-    Send message to M2 to get pushed to the BUS.
-    message: a J1939_Message to be sent on the BUS
-    '''
+    
     def sendMessage(self, message):
+        """
+        Send message to M2 to get pushed to the BUS.
+
+        :param message: a J1939_Message to be sent on the BUS
+        """
         # can_packet = "$18EF0B00080102030405060708*"
         # Add start delimiter - used by M2
         can_packet = "$" 
@@ -895,16 +904,20 @@ class TruckDevil:
             with self._lockM2:
                 self._m2.write(can_packet.encode('utf-8'))
             
-    # Used by internal timer for printMessages function.
+    
     def _setPrintMessagesTimeDone(self):
+        """Used by internal timer for printMessages function."""
         self._printMessagesTimeDone = True
         
-    # Used by internal timer for _readMessage function.
     def _setCollectionTimeDone(self):
+        """Used by internal timer for _readMessage function."""
         self._collectionTimeDone = True
       
-    # Read and store messages in the collectedMessages array.
     def _readMessage(self, abstractTPM=True):
+        """
+        Read and store messages in the collectedMessages array.
+        For internal function use.
+        """
         while True: 
             # Keep the thread from executing if not in collection state
             if (self._dataCollectionOccurring == True): 
@@ -1105,9 +1118,12 @@ class TruckDevil:
                     # Add message to collectedMessages list
                     self._collectedMessages.append(message) 
         
-    # Reads one message from M2 and returns it 
-    # hex string format ex: 18EF0B00080102030405060708
     def _readOneMessage(self):
+        """
+        Reads one message from M2 and returns it 
+        For internal function use.
+        hex string format ex: 18EF0B00080102030405060708
+        """
         response = ""
         startReading = False
         while True:
@@ -1135,8 +1151,11 @@ class TruckDevil:
                 response = ""
                 startReading = False
     
-    # Takes in J1939_message and return the decoded string
     def _UDSDecode(self, message):
+        """
+        Takes in J1939_message and return the decoded string
+        For internal function use.
+        """
         decoded = ''
         # Frame type is first nibble
         frame_type = message.data[0:1] 
@@ -1584,16 +1603,17 @@ class TruckDevil:
         return decoded
     
                 
-'''        
-Takes all long values except data (a string of hex characters)
-priority:       0x00-0x07
-pgn:            0x0000-0xFFFF
-dst_addr:       0x00-0xFF, 0xFF is for broadcast
-src_addr:       0x00-0xFF
-total_bytes:    >= 0
-data:           hex string, eg: "0102030405060708"  
-'''
 class J1939_Message:
+    """
+    Data object for storing the contents of a single J1939 message
+
+    :param priority:       0x00-0x07 (Default value = 0x00)
+    :param pgn:            0x0000-0xFFFF (Default value = 0x0000)
+    :param dst_addr:       0x00-0xFF, 0xFF is for broadcast (Default value = 0xFF)
+    :param src_addr:       0x00-0xFF (Default value = 0x00)
+    :param total_bytes:    >= 0
+    :param data:           hex string, eg: "0102030405060708" (Default value = "0000000000000000")
+    """
     def __init__(self, priority=0x00, 
                  pgn=0x0000, dst_addr=0xFF, 
                  src_addr=0x00, data="0000000000000000", 
@@ -1647,19 +1667,22 @@ class J1939_Message:
         self.total_bytes = total_bytes
         self.data = data
         
-    # Overrides default str method to return the parsed message
-    # "priority  pgn  src_addr --> dst_addr  [total_bytes]  data"
     def __str__(self):
+        """
+        Overrides default str method to return the parsed message
+        example: "priority  pgn  src_addr --> dst_addr  [total_bytes]  data"
+        """
         return "  %02X %04X %02X --> %02X [%d]  %s" % (self.priority, self.pgn, 
                self.src_addr, self.dst_addr, 
                self.total_bytes, self.data.upper())
         
-        
-'''
-Creates a new multipacket message - for internal use only to deal with Transport Protocol
-first_message: a J1939_Message object to initialize the multipacket message
-'''    
+          
 class _J1939_MultiPacketMessage:
+    """
+    Creates a new multipacket message - for internal use only to deal with Transport Protocol
+
+    :param first_message: a J1939_Message object to initialize the multipacket message
+    """
     def __init__(self, first_message=None):
         if (isinstance(first_message, J1939_Message)==False or 
                 first_message == None):
@@ -1698,12 +1721,12 @@ class _J1939_MultiPacketMessage:
             return False
 
 
-'''
-Creates a new ISO-TP (ISO 15765-2) message - 
-for internal use only to deal with long UDS messages
-first_message: a J1939_Message object to initialize the ISO-TP message
-''' 
 class _J1939_ISO_TP_Message:
+    """
+    Creates a new ISO-TP (ISO 15765-2) message - for internal use only to deal with long UDS messages
+
+    :param first_message: a J1939_Message object to initialize the ISO-TP message
+    """
     def __init__(self, first_message=None):
         if (isinstance(first_message, J1939_Message)==False or 
                 first_message == None):
