@@ -1113,16 +1113,27 @@ class TruckDevil:
         while True:
             with self._lockM2:
                 # Receive next character from M2
-                char = self._m2.read().decode("utf-8") 
+                if (self._m2.inWaiting() > 0):
+                    char = self._m2.read().decode("utf-8")
+                else:
+                    time.sleep(0.01)
+                    continue
             # Denotes start of CAN message
-            if (startReading == False and char == '$'): 
+            if (startReading == False and char == '$'):
+                response = '$'
                 startReading = True
             # Reading contents of CAN message, appending to response
             elif (startReading == True and char != '*'): 
                 response += char
             # Denotes end of CAN message - return response
-            elif (startReading == True and char == '*'): 
-                return response
+            elif (startReading == True and len(response) > 0 and 
+                    response[0] == '$' and char == '*' and 
+                    response.count("$") == 1):
+                return response[1:]
+            # If the serial buffer gets flushed during reading
+            elif (response.count("$") > 1):
+                response = ""
+                startReading = False
     
     # Takes in J1939_message and return the decoded string
     def _UDSDecode(self, message):
