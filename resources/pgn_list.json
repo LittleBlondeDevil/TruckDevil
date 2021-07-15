@@ -2303,18 +2303,13 @@
         "pgnDescription": "See document J1939-21 for PGN details.",
         "multipacket": "No",
         "transmissionRate": "variable",
-        "pgnDataLength": "variable",
-        "defaultPriority": "",
+        "pgnDataLength": 8,
+        "defaultPriority": 6,
         "spnList": [
-            2542,
-            2543,
-            2544,
-            2545,
-            2546,
-            2547,
-            2548,
-            2549,
-            2541
+			2541,
+			2542,
+			2544,
+			2543
         ]
     },
     "59904": {
@@ -2354,12 +2349,7 @@
         "pgnDataLength": 8,
         "defaultPriority": "",
         "spnList": [
-			2556,
-            2557,
-            2558,
-            2559,
-            2560,
-            2562
+			2556
         ]
     },
     "60672": {
@@ -2382,10 +2372,18 @@
         "pgnDescription": "See document J1939-81 for PGN details.",
         "multipacket": "No",
         "transmissionRate": "variable",
-        "pgnDataLength": "variable",
-        "defaultPriority": "",
+        "pgnDataLength": 8,
+        "defaultPriority": 6,
         "spnList": [
-            2848
+            2844,
+			2846,
+			2843,
+			2842,
+			2841,
+			2839,
+			2840,
+			2838,
+			2837
         ]
     },
     "61184": {

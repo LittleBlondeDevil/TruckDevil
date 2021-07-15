@@ -14,19 +14,28 @@ void setup() {
   long baud_rate = strtol(tempbuf, 0 ,10);
   Can0.begin(baud_rate);
   //Can0.begin(250000);
+  Can1.begin(baud_rate);
   
   //accept extended CAN frames
   for (filter = 0; filter < 3; filter++) {
     Can0.setRXFilter(filter, 0, 0, true);
+    Can1.setRXFilter(filter, 0, 0, true);
   }
 }
 
 void passFrameToSerial(CAN_FRAME &frame) {
    if (frame.extended == true) {
      Serial.print("$"); //start delimiter
-     if(frame.id <0x10000000) {Serial.print("0");}//adds leading zero if needed, to ensure 8 digits
-     Serial.print(frame.id, HEX); //id (ex: 18ECFFF9
-     Serial.print("0"); //adds leading zero to ensure 2 digits
+     if(frame.id <0x10) {Serial.print("0000000");} //add number of leading zeros needed to ensure 8 digits
+     else if(frame.id <0x100) {Serial.print("000000");}
+     else if(frame.id <0x1000) {Serial.print("00000");}
+     else if(frame.id <0x10000) {Serial.print("0000");}
+     else if(frame.id <0x100000) {Serial.print("000");}
+     else if(frame.id <0x1000000) {Serial.print("00");}
+     else if(frame.id <0x10000000) {Serial.print("0");}
+     
+     Serial.print(frame.id, HEX); //id (ex: 18ECFFF9)
+     Serial.print("0"); //adds leading zero to ensure 2 digits for length
      Serial.print(frame.length, HEX); //length (ex: 08)
      for (int count = 0; count < frame.length; count++) {
          if (frame.data.bytes[count] <0x10) {Serial.print("0");} //adds leading zero if needed, to ensure 2 digits is always sent
@@ -88,16 +97,22 @@ void loop() {
   // put your main code here, to run repeatedly:
   CAN_FRAME incoming;
   CAN_FRAME outgoing;
+  CAN_FRAME incoming1;
   //if there's an incoming CAN message to read from M2, pass it to Serial
   if (Can0.available() > 0) {
-	Can0.read(incoming);
-	passFrameToSerial(incoming);
+  	Can0.read(incoming);
+  	passFrameToSerial(incoming);
+  }
+  if (Can1.available() > 0) {
+    Can1.read(incoming1);
+    passFrameToSerial(incoming1);
   }
   //if there's a message from Serial, pass it to M2 CAN transceiver
   if (Serial.available() > 0) {
-	outgoing = passFrameFromSerial();
-	if (outgoing.id != -1) { //no errors occurred
-	  Can0.sendFrame(outgoing);
-	}
+	  outgoing = passFrameFromSerial();
+  	if (outgoing.id != -1) { //no errors occurred
+  	  Can0.sendFrame(outgoing);
+      Can1.sendFrame(outgoing);
+  	}
   }
 }

@@ -260,35 +260,47 @@ class TruckDevil:
                             startBit = self._spn_list[str(spn)]['bitPositionStart']
                             endBit = startBit + totalBits
                             
-                            bin_data = bin(int(message.data, 16))[2:] \
+                            bin_data_total = bin(int(message.data, 16))[2:] \
                                 .zfill(int((len(message.data)/2) * 8))
-                            start = len(bin_data) - endBit
-                            end = start + totalBits - 1
-                            extracted_data = int(bin_data[start:end+1], 2) 
+                            bin_data = bin_data_total[startBit:endBit]
+                            extracted_data = int(bin_data, 2)
+                            # Swap endianness if greater then 1 byte
+                            if totalBits > 8 and totalBits <= 16: #(2 bytes)
+                                extracted_data = int.from_bytes(extracted_data.to_bytes(2, byteorder='little'), byteorder='big', signed=False)
+                            if totalBits > 16 and totalBits <= 24: #(3 bytes)
+                                extracted_data = int.from_bytes(extracted_data.to_bytes(3, byteorder='little'), byteorder='big', signed=False)
+                            if totalBits > 24 and totalBits <= 32: #(4 bytes)
+                                extracted_data = int.from_bytes(extracted_data.to_bytes(4, byteorder='little'), byteorder='big', signed=False)
+                            if totalBits > 32 and totalBits <= 40: #(5 bytes)
+                                extracted_data = int.from_bytes(extracted_data.to_bytes(5, byteorder='little'), byteorder='big', signed=False)
+                            if totalBits > 48 and totalBits <= 56: #(6 bytes)
+                                extracted_data = int.from_bytes(extracted_data.to_bytes(6, byteorder='little'), byteorder='big', signed=False)
+                            if totalBits > 56 and totalBits <= 64: #(7 bytes)
+                                extracted_data = int.from_bytes(extracted_data.to_bytes(7, byteorder='little'), byteorder='big', signed=False)
+                                
                             # If all 1's, don't care about value, don't add
-                            if (extracted_data != int("1"*totalBits, 2)):
+                            if (extracted_data != int("1"*totalBits, 2) or totalBits == 1):
                                 # If bit data type, use bit_decoding_list
                                 if(self._spn_list[str(spn)]['units'] == 'bit' 
                                         and str(spn) 
                                         in self._bit_decoding_list): 
                                     decoded += (
-                                        '        ' + str(extracted_data) + 
+                                        '        ' + str(int(bin_data, 2)) + 
                                         ' : ' + 
-                                        self._bit_decoding_list[str(spn)][str(extracted_data)] + 
+                                        self._bit_decoding_list[str(spn)][str(int(bin_data, 2))] + 
                                         '\n'
                                     )
                                 #if ascii data type, convert 
                                 elif(self._spn_list[str(spn)]['units'] == 'ASCII'):
                                     try:
-                                        to_ascii = extracted_data.to_bytes(len(bin_data[start:end+1]) // 8, byteorder='big')
+                                        to_ascii = extracted_data.to_bytes(len(bin_data) // 8, byteorder='big')
                                         decoded += (
-                                            '        ' + bin_data[start:end+1] + 
+                                            '        ' + bin_data + 
                                             ' : ' + str(to_ascii, 'latin-1') + 
                                             '\n'
                                         )
                                     except UnicodeDecodeError:
                                         continue
-                                # If anything else, calculate value    
                                 else: 
                                     # Multiply by the resolution and add offset to get appropriate range
                                     try:
@@ -679,7 +691,6 @@ class TruckDevil:
             
             # data is contained in bytes 6-13, in hex string format
             data = can_packet[10:26]
-            
             message = J1939_Message(
                 priority, pgn, 
                 dst_addr, src_addr, 
