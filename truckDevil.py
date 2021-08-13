@@ -453,7 +453,7 @@ class TruckDevil:
             
             # priority is bits 4-6 in byte 1 of message 
             # (ex: byte 1 = 0x18, 0b00011000 = priority of 6)
-            priority = int(bin(int(can_packet[0:2], 16))[2:5], 2)
+            priority = int(int(can_packet[0:2], 16)/4)
             
             # dlc (data length) is byte 5
             dlc = int(can_packet[8:10], 16)
@@ -684,7 +684,7 @@ class TruckDevil:
             
             # priority is bits 4-6 in byte 1 of message 
             # (ex: byte 1 = 0x18, 0b00011000 = priority of 6)
-            priority = int(bin(int(can_packet[0:2], 16))[2:5], 2)
+            priority = int(int(can_packet[0:2], 16)/4)
             
             # dlc (data length) is byte 5
             dlc = int(can_packet[8:10], 16)
@@ -887,6 +887,7 @@ class TruckDevil:
                     # Adds end delimiter
                     self._m2.write((can_packet + data_transfer + '*') \
                         .encode('utf-8')) 
+                #time.sleep(0.01)
                 
         # Sending non-multipacket message - 
         # if number of bytes to send is less than or equal to 8
@@ -990,7 +991,7 @@ class TruckDevil:
                 
                 # priority is bits 4-6 in byte 1 of message 
                 # (ex: byte 1 = 0x18, 0b00011000 = priority of 6)
-                priority = int(bin(int(can_packet[0:2], 16))[2:5], 2)
+                priority = int(int(can_packet[0:2], 16)/4)
                 
                 # Data length (dlc) is byte 5
                 dlc = int(can_packet[8:10], 16)

@@ -13,13 +13,12 @@ void setup() {
   Serial.readBytes(tempbuf, 7); //read the baud rate (ex: 0250000)
   long baud_rate = strtol(tempbuf, 0 ,10);
   Can0.begin(baud_rate);
-  //Can0.begin(250000);
-  Can1.begin(baud_rate);
+  //Can1.begin(baud_rate);
   
   //accept extended CAN frames
   for (filter = 0; filter < 3; filter++) {
     Can0.setRXFilter(filter, 0, 0, true);
-    Can1.setRXFilter(filter, 0, 0, true);
+    //Can1.setRXFilter(filter, 0, 0, true);
   }
 }
 
@@ -100,19 +99,19 @@ void loop() {
   CAN_FRAME incoming1;
   //if there's an incoming CAN message to read from M2, pass it to Serial
   if (Can0.available() > 0) {
-  	Can0.read(incoming);
-  	passFrameToSerial(incoming);
+    Can0.read(incoming);
+    passFrameToSerial(incoming);
   }
-  if (Can1.available() > 0) {
-    Can1.read(incoming1);
-    passFrameToSerial(incoming1);
-  }
+  //if (Can1.available() > 0) {
+  //  Can1.read(incoming1);
+  //  passFrameToSerial(incoming1);
+  //}
   //if there's a message from Serial, pass it to M2 CAN transceiver
   if (Serial.available() > 0) {
-	  outgoing = passFrameFromSerial();
-  	if (outgoing.id != -1) { //no errors occurred
-  	  Can0.sendFrame(outgoing);
-      Can1.sendFrame(outgoing);
-  	}
+    outgoing = passFrameFromSerial();
+    if (outgoing.id != -1) { //no errors occurred
+      Can0.sendFrame(outgoing);
+      //Can1.sendFrame(outgoing);
+    }
   }
 }
