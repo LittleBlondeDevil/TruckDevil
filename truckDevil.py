@@ -7,25 +7,40 @@ import copy
 import json
 import os
 import binascii
+import can
 
 class TruckDevil:
-    """
-    Contains various functions for handling J1939 messages
-
-    :param port: serial port that M2 is connected on. Example: COMX, dev/ttyX
-    :param serial_baud: baudrate to connect over serial to M2 (Default value = 115200)
-    :param can_baud: baudrate on the CAN bus. Most common are 250000 and 500000. Use 0 for autobaud detection. (Default value = 0)
-    """
-    def __init__(self, port=None, serial_baud=115200, can_baud=0):
-        if (port == None):
-            raise Exception('No device port specified')
-        self._m2 = serial.Serial(
-            port=port, baudrate=serial_baud, 
-            dsrdtr=True
-        )
-        self._m2.setDTR(True)
-        self._lockM2 = threading.RLock()
+    def __init__(self, device_type='m2', port=None, channel='can0', can_baud=0):
+        """
+        Initializes TruckDevil
         
+        :param device_type: either "m2" or "socketcan" (Default value = 'm2').
+        :param port: serial port that the M2 is connected to, if used. For example: COM7 or /dev/ttyX. 0 if not using M2."
+        :param channel: CAN channel to send/receive on. For example: can0, can1, or vcan0. (Default value = 'can0')
+        :param can_baud: baudrate on the CAN bus. Most common are 250000 and 500000. Use 0 for autobaud detection. (Default value = 0)
+        """
+        if (device_type == 'm2'):
+            if (port == None):
+                raise Exception('No serial port specified for M2')
+            self._m2 = serial.Serial(
+                port=port, baudrate=115200, 
+                dsrdtr=True
+            )
+            self._m2.setDTR(True)
+            self._lockM2 = threading.RLock()
+
+            # Ensure that can_baud is filled to 7 digits
+            baudToSend = str(can_baud).zfill(7)
+            if (channel == "can0" or channel == "can1"):
+                baudToSend += channel
+            else:
+                baudToSend += "can0"
+            self._m2.write(baudToSend.encode('utf-8'))
+            self._m2used = True
+        else:
+            self._socketcan_bus = can.interface.Bus(bustype=device_type, channel=channel, bitrate=can_baud)
+            self._m2used = False
+
         self._conversations = []
         self._lockConversations = threading.RLock()
         
@@ -74,11 +89,6 @@ class TruckDevil:
         with open(os.path.join('resources', 'UDS_NRC.json')) \
                 as UDS_NRC_file:
             self._UDS_NRC_list = json.load(UDS_NRC_file)
-            
-        # Ensure that can_baud is filled to 7 digits
-        baudToSend = str(can_baud).zfill(7) 
-        self._m2.write(baudToSend.encode('utf-8'))
-        
     
     def done(self):
         """Close the Serial connection to M2."""
@@ -453,8 +463,7 @@ class TruckDevil:
             
             # priority is bits 4-6 in byte 1 of message 
             # (ex: byte 1 = 0x18, 0b00011000 = priority of 6)
-            priority = int(bin(int(can_packet[0:2], 16))[2:5], 2)
-            
+            priority = int(int(can_packet[0:2], 16)/4)
             # dlc (data length) is byte 5
             dlc = int(can_packet[8:10], 16)
             
@@ -684,7 +693,7 @@ class TruckDevil:
             
             # priority is bits 4-6 in byte 1 of message 
             # (ex: byte 1 = 0x18, 0b00011000 = priority of 6)
-            priority = int(bin(int(can_packet[0:2], 16))[2:5], 2)
+            priority = int(int(can_packet[0:2], 16)/4)
             
             # dlc (data length) is byte 5
             dlc = int(can_packet[8:10], 16)
@@ -792,8 +801,7 @@ class TruckDevil:
                     (target_pgn==None or message.pgn==target_pgn)):
                 return message, collectedMessages
         
-    
-    def sendMessage(self, message):
+    def _sendMessageM2(self, message):
         """
         Send message to M2 to get pushed to the BUS.
 
@@ -887,6 +895,7 @@ class TruckDevil:
                     # Adds end delimiter
                     self._m2.write((can_packet + data_transfer + '*') \
                         .encode('utf-8')) 
+                time.sleep(0.01)
                 
         # Sending non-multipacket message - 
         # if number of bytes to send is less than or equal to 8
@@ -914,6 +923,80 @@ class TruckDevil:
             can_packet += "*" 
             with self._lockM2:
                 self._m2.write(can_packet.encode('utf-8'))
+
+    def _sendMessageSocketCan(self, truckdevil_message):
+        """
+        Send message over socketcan to get pushed to the BUS.
+
+        :param truckdevil_message: a J1939_Message to be sent on the BUS
+        """
+        data_bytes = truckdevil_message.total_bytes
+        if (data_bytes <= 8):
+            can_id = ((truckdevil_message.priority*4 << 24)
+                + (truckdevil_message.pgn << 8)
+                + truckdevil_message.src_addr
+            )
+            if (truckdevil_message.pgn < 0xF000):
+                can_id += truckdevil_message.dst_addr << 8
+            data_array = bytes.fromhex(truckdevil_message.data)
+            socketcan_message = can.Message(arbitration_id=can_id, data=data_array, is_extended_id=True)
+            self._socketcan_bus.send(socketcan_message)
+        else:
+            num_bytes = "%04X" % data_bytes
+            num_packets = "%02X" % math.ceil(data_bytes / 7)
+            pgn = hex(truckdevil_message.pgn)[2:].zfill(4).upper()
+            can_id = ((truckdevil_message.priority*4 << 24)
+                + (0xEC00 << 8)
+                + (truckdevil_message.dst_addr << 8)
+                + truckdevil_message.src_addr
+            )
+            if (truckdevil_message.dst_addr == 0xFF):
+                # Send BAM message (ex: 20120003FFCAFE00)
+                control_message = bytes.fromhex("20" + num_bytes[2:4] + num_bytes[0:2] 
+                    + num_packets + "FF" + pgn[2:4] + pgn[0:2] + "00")
+            else:
+                # Send RTS message
+                control_message = bytes.fromhex("10" + num_bytes[2:4] + num_bytes[0:2] 
+                    + num_packets + "FF" + pgn[2:4] + pgn[0:2] + "00")
+            # send BAM or RTS message
+            socketcan_message = can.Message(arbitration_id=can_id, data=control_message, is_extended_id=True)
+            self._socketcan_bus.send(socketcan_message)
+            if (truckdevil_message.dst_addr == 0xFF):
+                # Sleep 100ms before transmitting next message as 
+                # stated in standard
+                time.sleep(0.1)
+            else:
+                # Sleep 150ms before transmitting next message to 
+                # allow for CTS to come through
+                time.sleep(0.15)
+            
+            # Next packet
+            can_id = ((truckdevil_message.priority*4 << 24)
+                + (0xEB00 << 8)
+                + (truckdevil_message.dst_addr << 8)
+                + truckdevil_message.src_addr
+            )
+            for i in range(0, int(num_packets, 16)):
+                # If a full 7 bytes is available
+                if ((i*7) < data_bytes - data_bytes % 7): 
+                    seven_bytes = truckdevil_message.data[i*14:(i*14)+14]
+                # Pad remaining last packet with FF for data
+                else: 
+                    seven_bytes = (truckdevil_message.data[i*14:(i*14)+((data_bytes%7)*2)] 
+                        + "FF"*(7-(data_bytes%7))
+                    )
+                data_transfer = "%02X" % (i+1) 
+                data_transfer += seven_bytes
+                socketcan_message = can.Message(arbitration_id=can_id, data=bytes.fromhex(data_transfer), is_extended_id=True)
+                self._socketcan_bus.send(socketcan_message)
+                time.sleep(0.01)           
+
+
+    def sendMessage(self, message):
+        if (self._m2used):
+            self._sendMessageM2(message)
+        else:
+            self._sendMessageSocketCan(message)
             
     
     def _setPrintMessagesTimeDone(self):
@@ -990,7 +1073,7 @@ class TruckDevil:
                 
                 # priority is bits 4-6 in byte 1 of message 
                 # (ex: byte 1 = 0x18, 0b00011000 = priority of 6)
-                priority = int(bin(int(can_packet[0:2], 16))[2:5], 2)
+                priority = int(int(can_packet[0:2], 16)/4)
                 
                 # Data length (dlc) is byte 5
                 dlc = int(can_packet[8:10], 16)
@@ -1128,40 +1211,50 @@ class TruckDevil:
                 with self._lockCollectedMessages:   
                     # Add message to collectedMessages list
                     self._collectedMessages.append(message) 
-        
+
     def _readOneMessage(self):
         """
-        Reads one message from M2 and returns it 
+        Reads one message from M2 or other device and returns it 
         For internal function use.
-        hex string format ex: 18EF0B00080102030405060708
+        returned hex string format ex: 18EF0B00080102030405060708
         """
-        response = ""
-        startReading = False
-        while True:
-            with self._lockM2:
-                # Receive next character from M2
-                if (self._m2.inWaiting() > 0):
-                    char = self._m2.read().decode("utf-8")
-                else:
-                    time.sleep(0.01)
-                    continue
-            # Denotes start of CAN message
-            if (startReading == False and char == '$'):
-                response = '$'
-                startReading = True
-            # Reading contents of CAN message, appending to response
-            elif (startReading == True and char != '*'): 
-                response += char
-            # Denotes end of CAN message - return response
-            elif (startReading == True and len(response) > 0 and 
-                    response[0] == '$' and char == '*' and 
-                    response.count("$") == 1):
-                return response[1:]
-            # If the serial buffer gets flushed during reading
-            elif (response.count("$") > 1):
-                response = ""
-                startReading = False
-    
+        if (self._m2used):
+            response = ""
+            startReading = False
+            while True:
+                with self._lockM2:
+                    # Receive next character from M2
+                    if (self._m2.inWaiting() > 0):
+                        char = self._m2.read().decode("utf-8")
+                    else:
+                        time.sleep(0.01)
+                        continue
+                # Denotes start of CAN message
+                if (startReading == False and char == '$'):
+                    response = '$'
+                    startReading = True
+                # Reading contents of CAN message, appending to response
+                elif (startReading == True and char != '*'): 
+                    response += char
+                # Denotes end of CAN message - return response
+                elif (startReading == True and len(response) > 0 and 
+                        response[0] == '$' and char == '*' and 
+                        response.count("$") == 1):
+                    return response[1:]
+                # If the serial buffer gets flushed during reading
+                elif (response.count("$") > 1):
+                    response = ""
+                    startReading = False
+        else:
+            msg = None
+            while msg is None:
+                msg = self._socketcan_bus.recv(0.01)
+            data_string = ''.join(format(x, '02x') for x in msg.data)
+            can_id = hex(msg.arbitration_id)[2:].zfill(8)
+            dlc = hex(msg.dlc)[2:].zfill(2)
+            response = can_id + dlc + data_string
+            return response
+
     def _UDSDecode(self, message):
         """
         Takes in J1939_message and return the decoded string
@@ -1675,7 +1768,7 @@ class J1939_Message:
         self.pgn = pgn
         self.dst_addr = dst_addr
         self.src_addr = src_addr
-        self.total_bytes = total_bytes
+        self.total_bytes = int(total_bytes)
         self.data = data
         
     def __str__(self):
