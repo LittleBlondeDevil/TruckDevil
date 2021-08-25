@@ -2,8 +2,17 @@
 
 #define Serial SerialUSB
 
-int filter;
+/* Configuration Parameters */
+#define LED_TIMEOUT 1000
+#define RX_LED DS5
+#define TX_LED DS6
+#define ON LOW
+#define OFF HIGH
 
+/* Global Variables */
+int filter;
+int RxIndication = 0;
+int TxIndication = 0;
 
 void setup() {
   // put your setup code here, to run once:
@@ -20,6 +29,12 @@ void setup() {
     Can0.setRXFilter(filter, 0, 0, true);
     //Can1.setRXFilter(filter, 0, 0, true);
   }
+
+  /* Configure the RX/TX LEDs */
+  pinMode(RX_LED, OUTPUT);
+  pinMode(TX_LED, OUTPUT);
+  digitalWrite(RX_LED, OFF);
+  digitalWrite(TX_LED, OFF);
 }
 
 void passFrameToSerial(CAN_FRAME &frame) {
@@ -97,10 +112,15 @@ void loop() {
   CAN_FRAME incoming;
   CAN_FRAME outgoing;
   CAN_FRAME incoming1;
+
   //if there's an incoming CAN message to read from M2, pass it to Serial
   if (Can0.available() > 0) {
     Can0.read(incoming);
     passFrameToSerial(incoming);
+
+    /* Set Rx indication */
+    RxIndication = LED_TIMEOUT;
+    digitalWrite(RX_LED, ON);
   }
   //if (Can1.available() > 0) {
   //  Can1.read(incoming1);
@@ -112,6 +132,25 @@ void loop() {
     if (outgoing.id != -1) { //no errors occurred
       Can0.sendFrame(outgoing);
       //Can1.sendFrame(outgoing);
+
+      /* Set Tx indication */
+      TxIndication = LED_TIMEOUT;
+      digitalWrite(TX_LED, ON);
+    }
+  }
+
+  /* Check for Tx indication timeout */
+  if(TxIndication > 0){
+    TxIndication--;
+    if(TxIndication == 0){ 
+      digitalWrite(TX_LED, OFF);
+    }
+  }
+  /* Check for Rx indication timeout */
+  if(RxIndication > 0){
+    RxIndication--;
+    if(RxIndication == 0){
+      digitalWrite(RX_LED, OFF);
     }
   }
 }
