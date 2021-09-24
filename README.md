@@ -6,9 +6,9 @@ TruckDevil is an interface for interacting with Trucks that use J1939 for commun
 
 ### Hardware:
 
-The CAN transciever in use is the Macchina M2 ([Under-the-Dash](https://www.macchina.cc/catalog/m2-boards/m2-under-dash)).
+The recommended CAN transciever to use is the Macchina M2 ([Under-the-Dash](https://www.macchina.cc/catalog/m2-boards/m2-under-dash)).
 
-A USB-A to Micro B Cable will be required to connect to the M2 with a laptop.
+However, python-can is used so hardware devices with any of the supported interfaces, such as SocketCAN, could be used: ([CAN Interface Modules](https://python-can.readthedocs.io/en/master/interfaces.html)).
 
 Additionally, an OBD-II to J1939 deutsch 9 pin adapter or splitter should be utilized, available on [Amazon](https://www.amazon.com/gp/product/B073DJN7FG/ref=ppx_yo_dt_b_asin_title_o05_s00?ie=UTF8&psc=1).
 
@@ -16,32 +16,40 @@ Additionally, an OBD-II to J1939 deutsch 9 pin adapter or splitter should be uti
 
 [Python 3](https://www.python.org/downloads/) is required.
 
-Additional software is required to flash the truckdevil_sketch firmware to the M2 (see Installation).
+Additional software is required to flash the truckdevil_sketch firmware to the M2, if used (see Installation).
 
 ## Installation
+- Install pyserial and python-can for connecting to the CAN device:
+    ```
+    > python -m pip install pyserial
+    > python -m pip install python-can
+    ```
+### M2 (if used)
 
 - Follow the first 3 steps included in the M2 [Arduino IDE Quick Start](https://docs.macchina.cc/m2-docs/arduino) guide
-	- Install the Arduino Desktop IDE
-	- Install the Macchina M2 Board Configuration
-	- Install drivers
+    - Install the Arduino Desktop IDE
+    - Install the Macchina M2 Board Configuration
+    - Install drivers
+- Download and include due_can and can_common libraries from collin80 into IDE
+    - [due_can](https://github.com/collin80/due_can)
+    - [can_common](https://github.com/collin80/can_common)
+    ```
+    Sketch > Include Library > Add .Zip Library...
+    ```
 - Upload truckDevil_sketch.ino to the M2
-	- Ensure M2 is plugged in over USB and that it's selected as the active board. 
-	```
-	Tools > Board: "[...]" > Macchina M2
-	```
-	- Select the serial port in use for the M2 (usually named "Arduino Due").
-	```
-	Tools > Port
-	```
-	- Open the truckDevil_sketch.ino file and upload it to the M2.
-	```
-	Sketch > Upload
-	```
-	- Once uploaded, disconnect M2 and plug back in.
-- Install pyserial for connecting to the M2 over python code:
-	```
-	$pip install pyserial
-	```
+    - Ensure M2 is plugged in over USB and that it's selected as the active board. 
+    ```
+    Tools > Board: "[...]" > Arduino Due (Native USB Port)
+    ```
+    - Select the serial port in use for the M2 (usually named "Arduino Due").
+    ```
+    Tools > Port
+    ```
+    - Open the truckDevil_sketch.ino file and upload it to the M2.
+    ```
+    Sketch > Upload
+    ```
+    - Once uploaded, disconnect M2 and plug back in.
 
 ## Usage
 
@@ -58,16 +66,18 @@ For simple tasks, such as reading and sending messages, there are two command li
 
 usage: readMessages.py [-h] [-s SERIAL_BAUD] [-t READ_TIME] [-n NUM_MESSAGES]
                        [-a] [-l] [-v]
-                       port can_baud
+                       device_type port can_channel can_baud
 
-read and print all messages from M2. If read_time and num_messages are both
-specified, stop printing when whichever one is reached first.
+read and print all messages from CAN device. If read_time and num_messages are
+both specified, stop printing when whichever one is reached first.
 
 positional arguments:
-  port                  serial port that the M2 is connected to. For example:
-                        COM7 or /dev/ttyX.
-  can_baud              baud rate on the CAN BUS that the M2 is connected. For
-                        example: 250000.
+  device_type           type of device to use. For example: m2 or socketcan.
+  port                  serial port that the M2 is connected to, if used. For
+                        example: COM7 or /dev/ttyX. 0 if not using M2.
+  can_channel           CAN channel to send/receive on. For example: can0 or
+                        can1.
+  can_baud              baud rate on the CAN BUS. For example: 250000.
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -91,25 +101,23 @@ optional arguments:
 ```
 > python sendMessage.py -h
 
-usage: sendMessage.py [-h] [-s SERIAL_BAUD] [-p PRIORITY] [-a SRC_ADDR]
-                      [-d DST_ADDR] [-v]
-                      port can_baud pgn data
+usage: sendMessage.py [-h] [-p PRIORITY] [-a SRC_ADDR] [-d DST_ADDR] [-v]
+                      device_type port can_channel can_baud pgn data
 
-send message to M2 to get pushed to the BUS.
+send message to CAN device to get pushed to the BUS.
 
 positional arguments:
-  port                  serial port that the M2 is connected to. For example:
-                        COM7 or /dev/ttyX.
-  can_baud              baud rate on the CAN BUS that the M2 is connected. For
-                        example: 250000.
+  device_type           type of device to use. For example: m2 or socketcan.
+  port                  serial port that the M2 is connected to, if used. For
+                        example: COM7 or /dev/ttyX. 0 if not using M2.
+  can_channel           CAN channel to send/receive on. For example: can0 or
+                        can1.
+  can_baud              baud rate on the CAN BUS. For example: 250000.
   pgn                   range: 0x0000-0xFFFF (0-65535).
   data                  hex string of data to send, example: 0102030405060708.
 
 optional arguments:
   -h, --help            show this help message and exit
-  -s SERIAL_BAUD, --serial_baud SERIAL_BAUD
-                        baud rate of the serial connection to the M2. Default:
-                        115200.
   -p PRIORITY, --priority PRIORITY
                         range: 0x00-0x07 (0-7).
   -a SRC_ADDR, --src_addr SRC_ADDR
@@ -131,15 +139,14 @@ The first thing that must be done is to create a new python file within the proj
 import truckDevil
 ```
 
-Next, serial communications and the truckDevil object can be created like so, passing in the serial port, the serial baud rate, and the CAN baud rate:
+Next, a connection to the CAN device can be created like so, passing in the device type, serial port (if using M2), the CAN channel, and the CAN baud rate:
 
 ```
-devil = truckDevil.TruckDevil('COM7', 115200, 250000)
+devil = truckDevil.TruckDevil('m2', 'COM7', 'can0', 250000)
 ```
-
+The device type could be 'm2' or 'socketcan'.
 The serial port could be 'COMX' on Windows or '/dev/ttyX' on Linux, corresponding to the port that the M2 is connected to.
-The serial baud rate is defaulted to 115200, unless the truckDevil_sketch firmware file has been modified.
-The CAN baud rate is dependent on the CANBUS that the M2 is connected to.
+The CAN baud rate is dependent on the CANBUS that the CAN device is connected to, use 0 for autobaud.
 
 When finished, the connection can be closed with the following:
 
@@ -261,6 +268,8 @@ devil.sendMessage(message)
 The Transport Protocol will be handled automatically.
 
 ## Acknowledgments
+
+Shoutout to collin80 for the Arduino CAN libraries!
 
 Thank you Jeremy Daily for providing truck ECUs and other useful hardware. Additionally, the dataBitDecoding.json file was created and modified from resources contained within Jeremy's [TU-RP1210](https://github.com/Heavy-Vehicle-Networking-At-U-Tulsa/TU-RP1210) repo.
 

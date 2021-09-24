@@ -2,11 +2,12 @@ import argparse
 import truckDevil as td
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser(description='send message to M2 to get pushed to the BUS.')
+    ap = argparse.ArgumentParser(description='send message to CAN device to get pushed to the BUS.')
     
-    ap.add_argument("port", help="serial port that the M2 is connected to. For example: COM7 or /dev/ttyX.")
-    ap.add_argument("can_baud", type=int, help="baud rate on the CAN BUS that the M2 is connected. For example: 250000.")
-    ap.add_argument("-s", "--serial_baud", default=115200, type=int, help="baud rate of the serial connection to the M2. Default: 115200.")
+    ap.add_argument("device_type", help="type of device to use. For example: m2 or socketcan.")
+    ap.add_argument("port", help="serial port that the M2 is connected to, if used. For example: COM7 or /dev/ttyX. 0 if not using M2.")
+    ap.add_argument("can_channel", help="CAN channel to send/receive on. For example: can0 or can1.")
+    ap.add_argument("can_baud", type=int, help="baud rate on the CAN BUS. For example: 250000.")
     
     
     ap.add_argument("pgn", help="range: 0x0000-0xFFFF (0-65535).")
@@ -40,7 +41,7 @@ if __name__ == "__main__":
         dst_addr = int(args['dst_addr'])
         
      
-    devil = td.TruckDevil(args['port'], args['serial_baud'], args['can_baud'])
+    devil = td.TruckDevil(args['device_type'], args['port'], args['can_channel'], args['can_baud'])
     
     
     message = td.J1939_Message(priority, pgn, dst_addr, src_addr, args['data'])
@@ -50,5 +51,3 @@ if __name__ == "__main__":
         print(str(message))
     elif(args['verbose'] != None and args['verbose'] >= 2):
         print(devil.getDecodedMessage(message))
-    
-    devil.done()
