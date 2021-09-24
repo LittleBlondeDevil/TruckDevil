@@ -465,6 +465,7 @@ class TruckDevil:
             # priority is bits 4-6 in byte 1 of message
             # (ex: byte 1 = 0x18, 0b00011000 = priority of 6)
             priority = int(int(can_packet[0:2], 16) / 4)
+
             # dlc (data length) is byte 5
             dlc = int(can_packet[8:10], 16)
 
