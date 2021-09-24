@@ -2,7 +2,7 @@ import argparse
 import truckDevil as td
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser(description='send message to M2 to get pushed to the BUS.')
+    ap = argparse.ArgumentParser(description='send message to CAN device to get pushed to the BUS.')
     
     ap.add_argument("device_type", help="type of device to use. For example: m2 or socketcan.")
     ap.add_argument("port", help="serial port that the M2 is connected to, if used. For example: COM7 or /dev/ttyX. 0 if not using M2.")

@@ -2,7 +2,7 @@ import argparse
 import truckDevil as td
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser(description='read and print all messages from M2. If read_time and num_messages are both specified, stop printing when whichever one is reached first.')
+    ap = argparse.ArgumentParser(description='read and print all messages from CAN device. If read_time and num_messages are both specified, stop printing when whichever one is reached first.')
     
     ap.add_argument("device_type", help="type of device to use. For example: m2 or socketcan.")
     ap.add_argument("port", help="serial port that the M2 is connected to, if used. For example: COM7 or /dev/ttyX. 0 if not using M2.")
