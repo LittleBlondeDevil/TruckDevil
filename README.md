@@ -6,9 +6,9 @@ TruckDevil is an interface for interacting with Trucks that use J1939 for commun
 
 ### Hardware:
 
-The CAN transciever in use is the Macchina M2 ([Under-the-Dash](https://www.macchina.cc/catalog/m2-boards/m2-under-dash)).
+The recommended CAN transciever to use is the Macchina M2 ([Under-the-Dash](https://www.macchina.cc/catalog/m2-boards/m2-under-dash)).
 
-A USB-A to Micro B Cable will be required to connect to the M2 with a laptop.
+However, python-can is used so hardware devices with any of the supported interfaces, such as SocketCAN, could be used: ([CAN Interface Modules](https://python-can.readthedocs.io/en/master/interfaces.html)).
 
 Additionally, an OBD-II to J1939 deutsch 9 pin adapter or splitter should be utilized, available on [Amazon](https://www.amazon.com/gp/product/B073DJN7FG/ref=ppx_yo_dt_b_asin_title_o05_s00?ie=UTF8&psc=1).
 
@@ -16,32 +16,40 @@ Additionally, an OBD-II to J1939 deutsch 9 pin adapter or splitter should be uti
 
 [Python 3](https://www.python.org/downloads/) is required.
 
-Additional software is required to flash the truckdevil_sketch firmware to the M2 (see Installation).
+Additional software is required to flash the truckdevil_sketch firmware to the M2, if used (see Installation).
 
 ## Installation
+- Install pyserial and python-can for connecting to the CAN device:
+    ```
+    > python -m pip install pyserial
+    > python -m pip install python-can
+    ```
+### M2 (if used)
 
 - Follow the first 3 steps included in the M2 [Arduino IDE Quick Start](https://docs.macchina.cc/m2-docs/arduino) guide
-	- Install the Arduino Desktop IDE
-	- Install the Macchina M2 Board Configuration
-	- Install drivers
+    - Install the Arduino Desktop IDE
+    - Install the Macchina M2 Board Configuration
+    - Install drivers
+- Download and include due_can and can_common libraries from collin80 into IDE
+    - [due_can](https://github.com/collin80/due_can)
+    - [can_common](https://github.com/collin80/can_common)
+    ```
+    Sketch > Include Library > Add .Zip Library...
+    ```
 - Upload truckDevil_sketch.ino to the M2
-	- Ensure M2 is plugged in over USB and that it's selected as the active board. 
-	```
-	Tools > Board: "[...]" > Macchina M2
-	```
-	- Select the serial port in use for the M2 (usually named "Arduino Due").
-	```
-	Tools > Port
-	```
-	- Open the truckDevil_sketch.ino file and upload it to the M2.
-	```
-	Sketch > Upload
-	```
-	- Once uploaded, disconnect M2 and plug back in.
-- Install pyserial for connecting to the M2 over python code:
-	```
-	$pip install pyserial
-	```
+    - Ensure M2 is plugged in over USB and that it's selected as the active board. 
+    ```
+    Tools > Board: "[...]" > Arduino Due (Native USB Port)
+    ```
+    - Select the serial port in use for the M2 (usually named "Arduino Due").
+    ```
+    Tools > Port
+    ```
+    - Open the truckDevil_sketch.ino file and upload it to the M2.
+    ```
+    Sketch > Upload
+    ```
+    - Once uploaded, disconnect M2 and plug back in.
 
 ## Usage
 
@@ -261,6 +269,8 @@ devil.sendMessage(message)
 The Transport Protocol will be handled automatically.
 
 ## Acknowledgments
+
+Shoutout to collin80 for the Arduino CAN libraries!
 
 Thank you Jeremy Daily for providing truck ECUs and other useful hardware. Additionally, the dataBitDecoding.json file was created and modified from resources contained within Jeremy's [TU-RP1210](https://github.com/Heavy-Vehicle-Networking-At-U-Tulsa/TU-RP1210) repo.
 
