@@ -106,6 +106,9 @@ class TruckDevil:
             raise Exception('data collection already started')
         with self._lockCollectedMessages:
             self._collectedMessages = []
+
+        self._dataCollectionOccurring = True
+
         if (self._collectionThread == None or
                 # If collectionThread hasn't been started before
                 self._collectionThread.is_alive() == False):
@@ -114,8 +117,6 @@ class TruckDevil:
                 daemon=True
             )
             self._collectionThread.start()
-
-        self._dataCollectionOccurring = True
 
     def getCurrentCollectedData(self):
         """
@@ -1015,227 +1016,233 @@ class TruckDevil:
         """
         while True:
             # Keep the thread from executing if not in collection state
-            if (self._dataCollectionOccurring == True):
-                # Look for full multipacket message to return first,
-                # if none found, receive from socket
+            if not self._dataCollectionOccurring:
+                break
+            # Look for full multipacket message to return first,
+            # if none found, receive from socket
+            self._lockConversations.acquire()
+            for i in range(0, len(self._conversations)):
+                # Found one ready to send - return it
+                if (self._conversations[i].readyToSend):
+                    message = self._conversations[i].completeMessage
+                    del self._conversations[i]
+                    with self._lockCollectedMessages:
+                        # Add completed multipacket message to
+                        # collectedMessages list
+                        self._collectedMessages.append(message)
+                    break
+            self._lockConversations.release()
+
+            # Look for full ISO-TP message to return next,
+            # if none found, receive from socket
+            self._lockUDSConversations.acquire()
+            for i in range(0, len(self._UDSconversations)):
+                # Found one ready to send - return it
+                if (self._UDSconversations[i].readyToSend):
+                    message = self._UDSconversations[i].completeMessage
+                    del self._UDSconversations[i]
+                    with self._lockCollectedMessages:
+                        # Add completed ISO-TP message to
+                        # collectedMessages list
+                        self._collectedMessages.append(message)
+                    break
+            self._lockUDSConversations.release()
+
+            # Receive one CAN message from M2
+            # (ex: 18EF0B00080102030405060708)
+            can_packet = self._readOneMessage()
+
+            # Source address is byte 4
+            src_addr = int(can_packet[6:8], 16)
+
+            # pgn is byte 2 and 3, where byte 2 is pdu_format
+            # and byte 3 is pdu_specific
+            pgn = can_packet[2:6]
+
+            pdu_format = int(pgn[0:2], 16)
+            pdu_specific = int(pgn[2:4], 16)
+
+            # If pdu_format is 0-239 then pdu_specific is dst_addr,
+            # otherwise it is group extension
+            if (pdu_format < 240):
+                dst_addr = pdu_specific
+                # Add 00 to pgn if destination specific
+                # (ex: EC0B pgn becomes EC00 with dst_addr 0x0B)
+                pgn = pgn[0:2] + "00"
+            else:
+                # Broadcast message
+                dst_addr = 0xFF
+            pgn = int(pgn, 16)
+
+            # priority is bits 4-6 in byte 1 of message
+            # (ex: byte 1 = 0x18, 0b00011000 = priority of 6)
+            priority = int(int(can_packet[0:2], 16) / 4)
+
+            # Data length (dlc) is byte 5
+            dlc = int(can_packet[8:10], 16)
+
+            # data is contained in bytes 6-13, in a hex string format
+            data = can_packet[10:26]
+
+            message = J1939_Message(
+                priority, pgn,
+                dst_addr, src_addr,
+                data, dlc
+            )
+
+            # Multipacket message received,
+            # broadcasted or peer-to-peer request to send
+            if (pgn == 0xec00 and
+                    (data[0:2] == "20" or data[0:2] == "10")):
+                mp_message = _J1939_MultiPacketMessage(message)
+                with self._lockConversations:
+                    self._conversations.append(mp_message)
+                # Break here if TPM messages are abstracted and
+                # don't add this message to collectedMessages
+                if (abstractTPM == True):
+                    continue
+
+            # Multipacket data transfer message recieved
+            if (pgn == 0xeb00):
+                # Find the correct conversation
                 self._lockConversations.acquire()
                 for i in range(0, len(self._conversations)):
-                    # Found one ready to send - return it
-                    if (self._conversations[i].readyToSend):
-                        message = self._conversations[i].completeMessage
-                        del self._conversations[i]
-                        with self._lockCollectedMessages:
-                            # Add completed multipacket message to
-                            # collectedMessages list
-                            self._collectedMessages.append(message)
+                    # Correct conversation found
+                    if (self._conversations[i].completeMessage.src_addr == src_addr and
+                            self._conversations[i].completeMessage.dst_addr == dst_addr):
+                        self._conversations[i].received_packets += 1
+                        # Received all the packets
+                        if (self._conversations[i].complete()):
+                            bytes_left = (self._conversations[i].num_bytes
+                                          - self._conversations[i].received_bytes)
+                            self._conversations[i] \
+                                .received_bytes += bytes_left
+                            data_index = (bytes_left * 2) + 2
+                            # Copy final bytes
+                            self._conversations[i] \
+                                .completeMessage.data += data[2:data_index]
+                            # Ready to send next time a message is read
+                            self._conversations[i].readyToSend = True
+                            # More packets needed,
+                        # add 7 bytes of data to stored message
+                        else:
+                            self._conversations[i].received_bytes += 7
+                            # Skip first byte, this is counter
+                            self._conversations[i] \
+                                .completeMessage.data += data[2:16]
                         break
                 self._lockConversations.release()
+                # Break here if TPM messages are abstracted,
+                # and don't add this message to collectedMessages
+                if (abstractTPM == True):
+                    continue
 
-                # Look for full ISO-TP message to return next,
-                # if none found, receive from socket
+            # UDS ISO-TP message received, first frame
+            if (pgn == 0xda00 and
+                    message.data[0:1] == '1'):
+                iso_tp_message = _J1939_ISO_TP_Message(message)
+                with self._lockUDSConversations:
+                    self._UDSconversations.append(iso_tp_message)
+                # Break here if TPM messages are abstracted,
+                # and don't add this message to collectedMessages
+                if (abstractTPM == True):
+                    continue
+            # UDS ISO-TP message recieved, consecutive frame
+            elif (pgn == 0xda00 and
+                  message.data[0:1] == '2'):
                 self._lockUDSConversations.acquire()
                 for i in range(0, len(self._UDSconversations)):
-                    # Found one ready to send - return it
-                    if (self._UDSconversations[i].readyToSend):
-                        message = self._UDSconversations[i].completeMessage
-                        del self._UDSconversations[i]
-                        with self._lockCollectedMessages:
-                            # Add completed ISO-TP message to
-                            # collectedMessages list
-                            self._collectedMessages.append(message)
-                        break
-                self._lockUDSConversations.release()
-
-                # Receive one CAN message from M2
-                # (ex: 18EF0B00080102030405060708)
-                can_packet = self._readOneMessage()
-
-                # Source address is byte 4
-                src_addr = int(can_packet[6:8], 16)
-
-                # pgn is byte 2 and 3, where byte 2 is pdu_format
-                # and byte 3 is pdu_specific
-                pgn = can_packet[2:6]
-
-                pdu_format = int(pgn[0:2], 16)
-                pdu_specific = int(pgn[2:4], 16)
-
-                # If pdu_format is 0-239 then pdu_specific is dst_addr,
-                # otherwise it is group extension
-                if (pdu_format < 240):
-                    dst_addr = pdu_specific
-                    # Add 00 to pgn if destination specific
-                    # (ex: EC0B pgn becomes EC00 with dst_addr 0x0B)
-                    pgn = pgn[0:2] + "00"
-                else:
-                    # Broadcast message
-                    dst_addr = 0xFF
-                pgn = int(pgn, 16)
-
-                # priority is bits 4-6 in byte 1 of message
-                # (ex: byte 1 = 0x18, 0b00011000 = priority of 6)
-                priority = int(int(can_packet[0:2], 16) / 4)
-
-                # Data length (dlc) is byte 5
-                dlc = int(can_packet[8:10], 16)
-
-                # data is contained in bytes 6-13, in a hex string format
-                data = can_packet[10:26]
-
-                message = J1939_Message(
-                    priority, pgn,
-                    dst_addr, src_addr,
-                    data, dlc
-                )
-
-                # Multipacket message received,
-                # broadcasted or peer-to-peer request to send
-                if (pgn == 0xec00 and
-                        (data[0:2] == "20" or data[0:2] == "10")):
-                    mp_message = _J1939_MultiPacketMessage(message)
-                    with self._lockConversations:
-                        self._conversations.append(mp_message)
-                    # Break here if TPM messages are abstracted and
-                    # don't add this message to collectedMessages
-                    if (abstractTPM == True):
-                        continue
-
-                # Multipacket data transfer message recieved
-                if (pgn == 0xeb00):
-                    # Find the correct conversation
-                    self._lockConversations.acquire()
-                    for i in range(0, len(self._conversations)):
-                        # Correct conversation found
-                        if (self._conversations[i].completeMessage.src_addr == src_addr and
-                                self._conversations[i].completeMessage.dst_addr == dst_addr):
-                            self._conversations[i].received_packets += 1
-                            # Received all the packets
-                            if (self._conversations[i].complete()):
-                                bytes_left = (self._conversations[i].num_bytes
-                                              - self._conversations[i].received_bytes)
-                                self._conversations[i] \
-                                    .received_bytes += bytes_left
-                                data_index = (bytes_left * 2) + 2
-                                # Copy final bytes
-                                self._conversations[i] \
-                                    .completeMessage.data += data[2:data_index]
-                                # Ready to send next time a message is read
-                                self._conversations[i].readyToSend = True
-                                # More packets needed,
-                            # add 7 bytes of data to stored message
-                            else:
-                                self._conversations[i].received_bytes += 7
-                                # Skip first byte, this is counter
-                                self._conversations[i] \
-                                    .completeMessage.data += data[2:16]
-                            break
-                    self._lockConversations.release()
-                    # Break here if TPM messages are abstracted,
-                    # and don't add this message to collectedMessages
-                    if (abstractTPM == True):
-                        continue
-
-                # UDS ISO-TP message received, first frame
-                if (pgn == 0xda00 and
-                        message.data[0:1] == '1'):
-                    iso_tp_message = _J1939_ISO_TP_Message(message)
-                    with self._lockUDSConversations:
-                        self._UDSconversations.append(iso_tp_message)
-                    # Break here if TPM messages are abstracted,
-                    # and don't add this message to collectedMessages
-                    if (abstractTPM == True):
-                        continue
-                # UDS ISO-TP message recieved, consecutive frame
-                elif (pgn == 0xda00 and
-                      message.data[0:1] == '2'):
-                    self._lockUDSConversations.acquire()
-                    for i in range(0, len(self._UDSconversations)):
-                        # Correct UDS message
-                        if (self._UDSconversations[i] \
-                                .completeMessage.src_addr == src_addr and
+                    # Correct UDS message
+                    if (self._UDSconversations[i] \
+                            .completeMessage.src_addr == src_addr and
+                            self._UDSconversations[i] \
+                                    .completeMessage.dst_addr == dst_addr):
+                        # The index of this received message
+                        indexByte = int(message.data[1:2], 16)
+                        # Correct order of data received
+                        if (indexByte == self._UDSconversations[i] \
+                                .nextExpectedIndex):
+                            # Received all data bytes (including the current packet)
+                            if (self._UDSconversations[i] \
+                                    .complete(curr_received=7)):
+                                bytes_left = (
+                                        self._UDSconversations[i].num_bytes -
+                                        self._UDSconversations[i].received_bytes
+                                )
                                 self._UDSconversations[i] \
-                                        .completeMessage.dst_addr == dst_addr):
-                            # The index of this received message
-                            indexByte = int(message.data[1:2], 16)
-                            # Correct order of data received
-                            if (indexByte == self._UDSconversations[i] \
-                                    .nextExpectedIndex):
-                                # Received all data bytes (including the current packet)
-                                if (self._UDSconversations[i] \
-                                        .complete(curr_received=7)):
-                                    bytes_left = (
-                                            self._UDSconversations[i].num_bytes -
-                                            self._UDSconversations[i].received_bytes
-                                    )
-                                    self._UDSconversations[i] \
-                                        .received_bytes += bytes_left
-                                    data_index = int((bytes_left * 2) + 2)
-                                    # Copy final bytes
-                                    self._UDSconversations[i].completeMessage \
-                                        .data += data[2:data_index]
-                                    self._UDSconversations[i].completeMessage.total_bytes = (
-                                            len(self._UDSconversations[i].completeMessage.data) / 2
-                                    )
-                                    # Ready to send next time a message is read
-                                    self._UDSconversations[i].readyToSend = True
-                                    # More packets needed, add 7 bytes of data
-                                # to stored message
-                                else:
-                                    self._UDSconversations[i].received_bytes += 7
-                                    self._UDSconversations[i].completeMessage \
-                                        .data += data[2:16]
-                                    # If indexByte is 15, we start back over
-                                    # at 0 for next sequence number
-                                    if (indexByte == 15):
-                                        self._UDSconversations[i] \
-                                            .nextExpectedIndex = 0
-                                    else:
-                                        self._UDSconversations[i] \
-                                            .nextExpectedIndex += 1
-                                break
-                                # Something happened, delete?
+                                    .received_bytes += bytes_left
+                                data_index = int((bytes_left * 2) + 2)
+                                # Copy final bytes
+                                self._UDSconversations[i].completeMessage \
+                                    .data += data[2:data_index]
+                                self._UDSconversations[i].completeMessage.total_bytes = (
+                                        len(self._UDSconversations[i].completeMessage.data) / 2
+                                )
+                                # Ready to send next time a message is read
+                                self._UDSconversations[i].readyToSend = True
+                                # More packets needed, add 7 bytes of data
+                            # to stored message
                             else:
-                                del self._UDSconversations[i]
-                    self._lockUDSConversations.release()
-                    # Break here if TPM messages are abstracted,
-                    # and don't add this message to collectedMessages
-                    if (abstractTPM == True):
-                        continue
-                # UDS ISO-TP message recieved, flow control frame
-                elif (pgn == 0xda00 and
-                      message.data[0:1] == '3'):
-                    # Break here if TPM messages are abstracted,
-                    # and don't add this message to collectedMessages
-                    if (abstractTPM == True):
-                        continue
-
-                with self._lockCollectedMessages:
-                    # Add message to collectedMessages list
-                    self._collectedMessages.append(message)
-
+                                self._UDSconversations[i].received_bytes += 7
+                                self._UDSconversations[i].completeMessage \
+                                    .data += data[2:16]
+                                # If indexByte is 15, we start back over
+                                # at 0 for next sequence number
+                                if (indexByte == 15):
+                                    self._UDSconversations[i] \
+                                        .nextExpectedIndex = 0
+                                else:
+                                    self._UDSconversations[i] \
+                                        .nextExpectedIndex += 1
+                            break
+                            # Something happened, delete?
+                        else:
+                            del self._UDSconversations[i]
+                self._lockUDSConversations.release()
+                # Break here if TPM messages are abstracted,
+                # and don't add this message to collectedMessages
+                if (abstractTPM == True):
+                    continue
+            # UDS ISO-TP message recieved, flow control frame
+            elif (pgn == 0xda00 and
+                  message.data[0:1] == '3'):
+                # Break here if TPM messages are abstracted,
+                # and don't add this message to collectedMessages
+                if (abstractTPM == True):
+                    continue
+            with self._lockCollectedMessages:
+                # Add message to collectedMessages list
+                self._collectedMessages.append(message)
     def _readOneMessage(self):
         """
         Reads one message from M2 or other device and returns it
         For internal function use.
         returned hex string format ex: 18EF0B00080102030405060708
         """
-        if (self._m2used):
+        if self._m2used:
             response = ""
             startReading = False
             while True:
                 with self._lockM2:
                     # Receive next character from M2
-                    if (self._m2.inWaiting() > 0):
-                        char = self._m2.read().decode("utf-8")
+                    if self._m2.inWaiting() > 0:
+                        # TODO: change back
+                        temp = self._m2.read()
+                        try:
+                            char = temp.decode("utf-8")
+                        except:
+                            print(temp)
+                            continue
+                        # char = self._m2.read().decode("utf-8")
                     else:
                         time.sleep(0.01)
                         continue
                 # Denotes start of CAN message
-                if (startReading == False and char == '$'):
+                if startReading == False and char == '$':
                     response = '$'
                     startReading = True
                 # Reading contents of CAN message, appending to response
-                elif (startReading == True and char != '*'):
+                elif startReading == True and char != '*':
                     response += char
                 # Denotes end of CAN message - return response
                 elif (startReading == True and len(response) > 0 and
@@ -1243,7 +1250,7 @@ class TruckDevil:
                       response.count("$") == 1):
                     return response[1:]
                 # If the serial buffer gets flushed during reading
-                elif (response.count("$") > 1):
+                elif response.count("$") > 1:
                     response = ""
                     startReading = False
         else:
