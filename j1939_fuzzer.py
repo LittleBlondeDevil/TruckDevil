@@ -38,7 +38,7 @@ class J1939Fuzzer:
 
         self.modifiable = {'btime': 'baseline_time', 'afreq': 'check_frequency', 'sfreq': 'message_frequency',
                            'mode': 'mode', 'tolerance': 'diff_tolerance', 'msgtotal': 'num_messages',
-                           'targets': 'targets', 'pgns': 'testable_pgns'}
+                           'pgns': 'testable_pgns'}
 
     def save_setting(self, setting, value):
         set_field = True
@@ -58,7 +58,7 @@ class J1939Fuzzer:
             elif setting == "tolerance" and (not isinstance(value, int) or value < 0):
                 print("Tolerance Difference must be a positive integer")
                 set_field = False
-            # TODO: add checking for targets and pgns lists
+            # TODO: add checking for pgns lists
             if set_field:
                 setattr(self, self.modifiable[setting], value)
         else:
@@ -66,7 +66,7 @@ class J1939Fuzzer:
 
     def modify_targets(self):
         # TODO: pretty print this
-        print("Current Targets : " + str(self.targets))
+        # print("Current Targets : " + str([str(t) for t in self.targets]))
         print("Add Target: 'add [address]'")
         print("Delete Target: 'delete [address]'")
         print("Clear Targets: 'clear'")
@@ -108,8 +108,11 @@ class J1939Fuzzer:
                             target = self.Target(address, pgn, data_snip)
                             self.targets.append(target)
                             break
+                else:
+                    target = self.Target(address)
+                    self.targets.append(target)
             else:
-                print(" here Specified address must be between 0-255")
+                print("Specified address must be between 0-255")
         elif "delete" in command:
             address = command.partition("delete")[2].strip()
             if isinstance(address, int) and address >= 0 or address < 256:
@@ -153,11 +156,11 @@ class J1939Fuzzer:
         fuzz_str += "\nTotal Messages (msgtotal): " + str(self.num_messages) + " | "
         fuzz_str += "\nTolerance Difference(tolerance): " + str(self.diff_tolerance) + "%"
         if len(self.targets) == 0:
-            fuzz_str += "\nTarget Addresses(targets): ALL"
+            fuzz_str += "\nTarget Addresses: ALL"
         else:
-            fuzz_str += "\nTarget Addresses(targets): "
-            for addr in self.targets:
-                fuzz_str += str(addr)
+            fuzz_str += "\nTarget Addresses: "
+            for target in self.targets:
+                fuzz_str += str(target)
         if len(self.testable_pgns) == 0:
             fuzz_str += "\nTestable PGNs(pgns): ALL"
         else:
@@ -184,7 +187,7 @@ class J1939Fuzzer:
     '''
 
     def mutate(self, message, mutate_priority=False, mutate_src_addr=False, mutate_dst_addr=False, mutate_pgn=False,
-               mutate_data=False):
+               mutate_data=False, mutate_data_length=False):
         if mutate_priority:
             pri = random.randint(0, 7)
             message.priority = pri
@@ -199,14 +202,25 @@ class J1939Fuzzer:
                 val = random.randint(0, 61439)  # only include destination specific PGNs
 
             if val < 61440:  # if in the destination specific range
-                val = int(hex(val)[2:4] + '00', 16)  # only use the first byte
+                val = val & 0xFF00  # only use the first byte
             message.pgn = val
-        if mutate_data and len(message.data) / 2 > 0:
-            numBytesToMutate = random.randint(1, len(message.data) / 2)
-            for i in range(0, numBytesToMutate):
-                byteToMutate = random.randint(0, len(message.data) / 2 - 1)
+        message_data_bytes = int(len(message.data) / 2)
+        if mutate_data and message_data_bytes > 0:
+            num_bytes_to_mutate = random.randint(1, message_data_bytes)
+            for i in range(0, num_bytes_to_mutate):
+                byte_to_mutate = random.randint(0, message_data_bytes - 1)
                 data_byte = hex(random.randint(0, 255))[2:].zfill(2)
-                message.data = message.data[0:byteToMutate * 2] + data_byte + message.data[byteToMutate * 2 + 2:]
+                message.data = message.data[0:byte_to_mutate * 2] + data_byte + message.data[byte_to_mutate * 2 + 2:]
+        if mutate_data_length:
+            shorter = random.randint(0, 1)
+            if shorter:
+                num_bytes = random.randint(0, message_data_bytes - 1)
+                message.data = message.data[0:num_bytes * 2]
+            else:
+                num_bytes_added = random.randint(1, 1785 - message_data_bytes)
+                for i in range(0, num_bytes_added + 1):
+                    data_byte = hex(random.randint(0, 255))[2:].zfill(2)
+                    message.data += data_byte
         return message
 
     '''
@@ -320,23 +334,33 @@ class J1939Fuzzer:
                 break
             incoming_messages = self.devil.stopDataCollection()
             # crash analysis
+            any_anomalies = False
             after_fuzz = []
             for x in range(256):
-                node = {'total_messages': 0, 'pgns': {}}
+                node = {'total_messages': 0, 'pgns': {}, 'boot_msg_found': False}
                 after_fuzz.append(node)
             for m in incoming_messages:
                 after_fuzz[m.src_addr]['total_messages'] += 1
+                # TODO: maybe get rid of the collection pgns?
                 if m.pgn not in after_fuzz[m.src_addr]['pgns']:
                     after_fuzz[m.src_addr]['pgns'][m.pgn] = 1
                 else:
                     after_fuzz[m.src_addr]['pgns'][m.pgn] += 1
-            any_anomalies = False
-            for src in range(256):
+                if len(self.targets) > 0:
+                    for t in self.targets:
+                        if t.address == m.src_addr and t.reboot_pgn == m.pgn and t.reboot_data in m.data:
+                            after_fuzz[m.src_addr]['boot_msg_found'] = True
+            addresses = [t.address for t in self.targets] if len(self.targets) != 0 else list(range(0, 256))
+            for src in addresses:
                 anomaly = False
                 message = ""
                 base_per_sec = self.baseline[src]['total_messages'] / self.baseline_time
                 curr_per_sec = after_fuzz[src]['total_messages'] / self.check_frequency
-                if curr_per_sec == 0 and base_per_sec != 0:
+                if after_fuzz[src]['boot_msg_found']:
+                    anomaly = True
+                    any_anomalies = True
+                    message = "targets reboot message was detected."
+                elif curr_per_sec == 0 and base_per_sec != 0:
                     anomaly = True
                     any_anomalies = True
                     message = "The baseline had messages for this node, but this interval did not."
@@ -346,14 +370,13 @@ class J1939Fuzzer:
                         anomaly = True
                         any_anomalies = True
                         message = "Number of messages changed by " + "{:.2f}".format(percent_diff) + "%"
-
                 if anomaly:
                     print("\n    source: " + str(src))
                     print("        interval messages/second: " + str(curr_per_sec))
                     print("        interval pgns sent to: " + str(after_fuzz[src]['pgns']))
                     print("        baseline messages/second: " + str(base_per_sec))
                     print("        baseline pgns sent to: " + str(self.baseline[src]['pgns']))
-                    print("        " + message)
+                    print("        Reason: " + message)
 
             if any_anomalies:
                 self.pause_fuzzing = True
@@ -381,8 +404,12 @@ class J1939Fuzzer:
     def create_fuzz_list(self):
         fuzz_list = []
         for i in range(0, self.num_messages):
+            choice = self.mode
+            # either mutate or generate
+            if choice == 2:
+                choice = random.randint(0, 1)
             # mutate a message from the baseline
-            if self.mode == 0:
+            if choice == 0:
                 mutate_index = random.randint(0, len(self.baseline_messages) - 1)
                 # TODO: make these parameters based on settings
                 m = self.mutate(self.baseline_messages[mutate_index], mutate_priority=False,
@@ -390,21 +417,9 @@ class J1939Fuzzer:
                                 mutate_dst_addr=False,
                                 mutate_pgn=False, mutate_data=True)
             # generate a message
-            elif self.mode == 1:
+            elif choice == 1:
                 # TODO: make these parameters based on settings
                 m = self.generate(src_addr=0x00, dst_addr=0x0B)
-            # either mutate or generate
-            elif self.mode == 2:
-                which = random.randint(0, 1)
-                # TODO: make these parameters based on settings
-                if which == 0:
-                    mutate_index = random.randint(0, len(self.baseline_messages) - 1)
-                    m = self.mutate(self.baseline_messages[mutate_index], mutate_priority=False,
-                                    mutate_src_addr=False,
-                                    mutate_dst_addr=False,
-                                    mutate_pgn=False, mutate_data=True)
-                else:
-                    m = self.generate()
             fuzz_list.append(m)
         return fuzz_list
 
@@ -430,15 +445,18 @@ class J1939Fuzzer:
         print("Baselining complete.")
 
     class Target:
-        def __init__(self, address, reboot_pgn, reboot_data_snip):
+        def __init__(self, address, reboot_pgn=None, reboot_data_snip=None):
             self.address = address
             self.reboot_pgn = reboot_pgn
             self.reboot_data = reboot_data_snip
 
         def __str__(self):
             target_str = "Address: " + "0x{:02x}".format(self.address) + " (" + str(self.address) + ")\n"
-            target_str += "Boot message PGN: " + "0x{:04x}".format(self.reboot_pgn) + " (" + str(self.reboot_pgn) + ")\n"
-            target_str += "Boot message data contains: " + self.reboot_data
+            if self.reboot_pgn is not None:
+                target_str += "Boot message PGN: " + "0x{:04x}".format(self.reboot_pgn) + " (" + str(
+                    self.reboot_pgn) + ")\n"
+            if self.reboot_data is not None:
+                target_str += "Boot message data contains: " + self.reboot_data
 
 
 # https://stackoverflow.com/questions/3160699/python-progress-bar/34482761#34482761
@@ -533,7 +551,8 @@ def main_mod(devil):
                       "  1) View settings\n"
                       "  2) Record baseline\n"
                       "  3) View baseline results\n"
-                      "  4) Start Fuzzer")
+                      "  4) Set targets\n"
+                      "  5) Start Fuzzer")
             else:
                 setting = fuzz_select.partition('?')[0].strip()
                 if setting in fuzzer.modifiable:
