@@ -10,59 +10,10 @@ import sys
 
 import truckDevil as td
 
+from TruckDevil.settings import SettingsManager, Setting
+
 
 class J1939Fuzzer:
-    class Setting:
-        def __init__(self, name, datatype, dval, minval=None, maxval=None, description=None):
-            self.name = name
-            self.datatype = datatype
-            self.dval = dval
-            self.__d = description
-            self.max = maxval
-            self.min = minval
-            self.v = None
-
-        @property
-        def describe(self):
-            if isinstance(self.v, list):
-                listval = "[{}]".format(len(self.v))
-                desc = "{:<24} {:>12} (default: [0])".format(self.name, listval)
-            else:
-                desc = "{:<24} {:>12} (default: {:<5}) ".format(self.name, self.value, self.dval)
-
-            if self.__d is None:
-                return desc
-            return "{} {}".format(desc, self.__d)
-
-        @property
-        def value(self):
-            if self.v is not None:
-                return self.v
-            return self.dval
-
-        @value.setter
-        def value(self, v):
-
-            if not isinstance(v, self.datatype):
-                print("{} must be of type {} {} but was {}".format(
-                    self.name, self.datatype, type(self.v), type(v)
-                ))
-                return
-
-            if (self.max is not None and v > self.max) or (self.min is not None and v < self.min):
-                print("{} value restricted to the range [{} .. {}]".format(
-                    self.name, self.min, self.max
-                ))
-                return
-
-            self.v = v
-            return
-
-        @property
-        def has_user_set(self):
-            if self.v is None:
-                return False
-            return True
 
     class Target:
         def __init__(self, address, reboot_pgn=None, reboot_data_snip=None):
@@ -144,60 +95,59 @@ class J1939Fuzzer:
         self.fuzzed_messages = []
         self.lock_fuzzed_messages = threading.RLock()
 
-        self.settings = [
+        self.sm = SettingsManager()
+        sl = [
             # TODO: change default to 60
-            self.Setting("baseline_time", int, 10, 10, 10000,
-                         "the amount of time to record the baseline for, in seconds."),
-            self.Setting("check_frequency", int, 20, 1, 10000,
-                         "how long to wait between analysing for anomalies, in seconds."),
-            self.Setting("num_messages", int, 5000, 1, 100000),
-            self.Setting("message_frequency", float, 0.5, 0.1, 1000.0,
-                         "the amount of time to wait between sending each fuzzed message, in seconds."),
-            self.Setting("mode", int, 0, 0, 2,
-                         "There are 3 modes: mutational (0), generational (1), mutational/generational (2). "),
-            self.Setting("test_case_priority", int, 0, 0, 7,
-                         "Priority set for each test case."),
-            self.Setting("mutate_priority", bool, False, None, None,
-                         "Should the generator mutate the test case priority field?"),
-            self.Setting("test_case_pgn", int, 0, 0, 65535,
-                         "PGN value set on each test case"),
-            self.Setting("mutate_pgn", bool, False, None, None,
-                         "Should the generator mutate the test case pgn?"),
-            self.Setting("test_case_src_address", int, 0, 0, 255,
-                         "Source address to set for each test case"),
-            self.Setting("mutate_src_address", bool, False, None, None,
-                         "Should the generator mutate the source address?"),
-            self.Setting("test_case_data", str, "", None, None,
-                         "Data to be set for the test case"),
-            self.Setting("mutate_data", bool, False, None, None,
-                         "Should the generator mutate the data field?"),
-            self.Setting("diff_tolerance", int, 5, 1, 1000,
+            Setting("baseline_time", 10).add_constraint("minimum", lambda x: 10 <= x)
+                .add_description("the amount of time to record the baseline for, in seconds."),
+
+            Setting("check_frequency", 20).add_constraint("minimum", lambda x: 1 <= x)
+                .add_description("how long to wait between analysing for anomalies, in seconds."),
+
+            Setting("num_messages", 5000).add_constraint("minimum", lambda x: 1 <= x)
+                .add_description("number of test cases to generate"),
+
+            Setting("message_frequency", 0.5).add_constraint("minimum", lambda x: 0.0 <= x)
+                .add_description("the amount of time to wait between sending each fuzzed message, in seconds."),
+
+            Setting("mode", 0).add_constraint("allowed_states", lambda x: 0 <= x <= 2)
+                .add_description("There are 3 modes: mutational (0), generational (1), mutational/generational (2). "),
+
+            Setting("test_case_priority", 0).add_constraint("range", lambda x: 0 <= x <= 7)
+                .add_description("Priority set for each test case."),
+
+            Setting("mutate_priority", False).add_constraint("boolean", lambda x: type(x) is bool)
+                .add_description("Should the generator mutate the test case priority field?"),
+
+            Setting("test_case_pgn", 0).add_constraint("range", lambda x: 0 <= x <= 65535)
+                .add_description("PGN value set on each test case"),
+
+            Setting("mutate_pgn", False).add_constraint("boolean", lambda x: type(x) is bool)
+                .add_description("Should the generator mutate the test case pgn?"),
+
+            Setting("test_case_src_address", 0).add_constraint("range", lambda x: 0 <= x <= 255)
+                .add_description("Source address to set for each test case"),
+
+            Setting("mutate_src_address", False).add_constraint("boolean", lambda x: type(x) is bool)
+                .add_description("Should the generator mutate the source address?"),
+
+            Setting("test_case_data", "")
+                .add_constraint("max_length", lambda x: len(x) <= (2 * 1785))
+                .add_constraint("even_bytes", lambda x: len(x) % 2 == 0)
+                .add_description("Data to be set for the test case"),
+
+            Setting("mutate_data", False).add_constraint("boolean", lambda x: type(x) is bool)
+                .add_description("Should the generator mutate the data field?"),
+
+            Setting("diff_tolerance", 5).add_constraint("minimum", lambda x: 0 <= x)
+                .add_description(
                          "the acceptable difference in the volume of messages between the "
                          "baseline and the current interval to determine if a crash has occurred. "
                          "A percentage value is expected."),
         ]
 
-    def save_setting(self, setting, value):
-        for idx, s in enumerate(self.settings):
-            if setting == s.name:
-                self.settings[idx].value = value
-                return
-        print("setting {} not found.".format(setting))
-
-    def __getattr__(self, item):
-        for idx, s in enumerate(self.settings):
-            if item == s.name:
-                return self.settings[idx].value
-
-    def has_user_set(self, setting):
-        for idx, s in enumerate(self.settings):
-            if setting == s.name:
-                return self.settings[idx].has_user_set
-
-    def show_settings(self):
-        for s in self.settings:
-            print(s.describe)
-        return
+        for setting in sl:
+            self.sm.add_setting(setting)
 
     '''
     given a J1939_Message, mutate different parts of it randomly depending on the arguments
@@ -443,14 +393,14 @@ class J1939Fuzzer:
                 mutate_index = random.randint(0, len(self.baseline_messages) - 1)
                 m = copy.copy(self.baseline_messages[mutate_index])
                 # TODO: make these parameters based on settings
-                if self.has_user_set("test_case_priority"):
-                    m.priority = self.test_case_priority
-                if self.has_user_set("test_case_src_address"):
-                    m.src_addr = self.test_case_src_address
-                if self.has_user_set("test_case_pgn"):
-                    m.pgn = self.test_case_pgn
-                if self.has_user_set("test_case_data"):
-                    m.data = self.test_case_data
+                if self.sm["test_case_priority"].updated:
+                    m.priority = self.sm.test_case_priority
+                if self.sm["test_case_src_address"].updated:
+                    m.src_addr = self.sm.test_case_src_address
+                if self.sm["test_case_pgn"].updated:
+                    m.pgn = self.sm.test_case_pgn
+                if self.sm["test_case_data"].updated:
+                    m.data = self.sm.test_case_data
                 mutate_dst_address = True
                 if len(self.targets) > 0:
                     which = random.randint(0, len(self.targets))
@@ -458,8 +408,13 @@ class J1939Fuzzer:
                     m.dst_addr = target_addr
                     mutate_dst_address = False
 
-                m = self.mutate(m, self.mutate_priority, self.mutate_src_address, mutate_dst_address, self.mutate_pgn,
-                                self.mutate_data)
+                m = self.mutate(m,
+                                self.sm.mutate_priority,
+                                self.sm.mutate_src_address,
+                                mutate_dst_address,
+                                self.sm.mutate_pgn,
+                                self.sm.mutate_data)
+
             # generate a message
             elif choice == 1:
                 # TODO: make these parameters based on settings
@@ -471,9 +426,9 @@ class J1939Fuzzer:
 
     def record_baseline(self):
         self.devil._m2.flushInput()
-        print("Baselining for " + str(self.baseline_time) + " seconds...")
+        print("Baselining for " + str(self.sm.baseline_time) + " seconds...")
         self.devil.startDataCollection()
-        time.sleep(self.baseline_time)
+        time.sleep(self.sm.baseline_time)
         self.baseline_messages = self.devil.stopDataCollection()
         if len(self.baseline_messages) == 0:
             return []
@@ -518,7 +473,7 @@ class FuzzerCommands(cmd.Cmd):
 
     def do_settings(self, arg):
         """Show the settings and each setting value"""
-        self.fz.show_settings()
+        print(self.fz.sm)
         return
 
     def do_set(self, arg):
@@ -540,24 +495,22 @@ class FuzzerCommands(cmd.Cmd):
         if len(argv) == 1:
             print("expected value, see 'help set'")
             return
-        for s in self.fz.settings:
-            if s.name == name:
-                if s.datatype is bool:
-                    if argv[1] in ["True", "true", "on", 1]:
-                        s.value = True
-                    elif argv[1] in ["False", "false", "off", 0]:
-                        s.value = False
-                elif s.datatype is int:
-                    if argv[1].startswith("0x"):
-                        s.value = int(argv[1], 16)
-                    else:
-                        s.value = int(argv[1])
-                elif s.datatype is float:
-                    s.value = float(argv[1])
+        try:
+            if self.fz.sm[name].datatype == int:
+                self.fz.sm.set(name, int(argv[1]))
+            elif self.fz.sm[name].datatype == float:
+                self.fz.sm.set(name, float(argv[1]))
+            elif self.fz.sm[name].datatype == bool:
+                if argv[1] in ["True", "true", "on", 1]:
+                    self.fz.sm.set(name, True)
+                elif argv[1] in ["False", "false", "off", 0]:
+                    self.fz.sm.set(name, False)
                 else:
-                    s.value = argv[1:]
-                return
-        print("No setting {} found".format(argv[0]))
+                    self.fz.sm.set(name, argv[1])
+            else:
+                self.fz.sm.set(name, argv[1])
+        except ValueError as e:
+            print("Could not set: {}".format(e))
         return
 
     def do_target(self, arg):
@@ -670,14 +623,14 @@ class FuzzerCommands(cmd.Cmd):
         """
         if len(self.fz.baseline) == 0:
             print("No baseline has been recorded yet. See the record baseline command.")
-        print("Recorded {:<6} messages in {:<6} seconds".format(len(self.fz.baseline), self.fz.baseline_time))
-        print("Baseline time: {:<6} messages per second".format(len(self.fz.baseline) / self.fz.baseline_time))
+        print("Recorded {:<6} messages in {:<6} seconds".format(len(self.fz.baseline), self.fz.sm.baseline_time))
+        print("Baseline time: {:<6} messages per second".format(len(self.fz.baseline) / self.fz.sm.baseline_time))
 
     def do_generate_test_cases(self, arg):
         """
         Generate the messages the fuzzer will send during the fuzzing
         """
-        print("Creating " + str(self.fz.num_messages) + " messages to fuzz...")
+        print("Creating " + str(self.fz.sm.num_messages) + " messages to fuzz...")
         self.fz.create_fuzz_list()
         return
 
@@ -700,13 +653,13 @@ class FuzzerCommands(cmd.Cmd):
         anomaly_check_thread = threading.Thread(target=self.fz.anomaly_check, daemon=False)
         anomaly_check_thread.start()
         try:
-            for i in progressbar(range(self.fz.num_messages), "Sending: ", 40):
+            for i in progressbar(range(self.fz.sm.num_messages), "Sending: ", 40):
                 m = self.fz.test_cases[i]
                 # TODO: re-enable sending
                 # self.fz.devil.sendMessage(m)
                 with self.fz.lock_fuzzed_messages:
                     self.fz.fuzzed_messages.append(m)
-                time.sleep(self.fz.message_frequency)
+                time.sleep(self.fz.sm.message_frequency)
                 while self.fz.pause_fuzzing:
                     time.sleep(1)
                 if self.fz.done_fuzzing:
