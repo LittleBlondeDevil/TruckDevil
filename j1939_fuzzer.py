@@ -10,8 +10,8 @@ import sys
 
 import truckDevil as td
 
-class J1939Fuzzer:
 
+class J1939Fuzzer:
     class Setting:
         def __init__(self, name, datatype, dval, minval=None, maxval=None, description=None):
             self.name = name
@@ -20,12 +20,12 @@ class J1939Fuzzer:
             self.__d = description
             self.max = maxval
             self.min = minval
-            self.value = dval
+            self.v = None
 
         @property
         def describe(self):
-            if isinstance(self.__v, list):
-                listval = "[{}]".format(len(self.__v))
+            if isinstance(self.v, list):
+                listval = "[{}]".format(len(self.v))
                 desc = "{:<24} {:>12} (default: [0])".format(self.name, listval)
             else:
                 desc = "{:<24} {:>12} (default: {:<5}) ".format(self.name, self.value, self.dval)
@@ -36,14 +36,16 @@ class J1939Fuzzer:
 
         @property
         def value(self):
-            return self.__v
+            if self.v is not None:
+                return self.v
+            return self.dval
 
         @value.setter
         def value(self, v):
 
             if not isinstance(v, self.datatype):
                 print("{} must be of type {} {} but was {}".format(
-                    self.name, self.datatype, type(self.__v), type(v)
+                    self.name, self.datatype, type(self.v), type(v)
                 ))
                 return
 
@@ -53,19 +55,27 @@ class J1939Fuzzer:
                 ))
                 return
 
-            self.__v = v
+            self.v = v
             return
+
+        @property
+        def has_user_set(self):
+            if self.v is None:
+                return False
+            return True
 
     class Target:
         def __init__(self, address, reboot_pgn=None, reboot_data_snip=None):
 
             self.__addr = 0
-            self.__reboot_pgn = 0
-            self.__reboot_data = ""
+            self.__reboot_pgn = None
+            self.__reboot_data_snip = None
 
             self.address = address
-            self.reboot_pgn = reboot_pgn or 60928
-            self.reboot_data_snip = reboot_data_snip or ""
+            if reboot_pgn is not None:
+                self.reboot_pgn = reboot_pgn
+            if reboot_data_snip is not None:
+                self.reboot_data_snip = reboot_data_snip
 
         @property
         def address(self):
@@ -85,7 +95,6 @@ class J1939Fuzzer:
                 raise ValueError("addresses must be between 0 and 255")
             return
 
-
         @property
         def reboot_pgn(self):
             return self.__reboot_pgn
@@ -102,23 +111,24 @@ class J1939Fuzzer:
                 else:
                     print("Valid reboot_pgn values are between 0 and 65535")
 
+        def has_user_set_reboot_pgn(self):
+            if self.__reboot_pgn is None:
+                return False
+            return True
+
         @property
         def reboot_data_snip(self):
-            return self.__reboot_data
+            return self.__reboot_data_snip
 
         @reboot_data_snip.setter
         def reboot_data_snip(self, value):
             if isinstance(value, str) and value.startswith("0x"):
-                self.__reboot_data = value
+                self.__reboot_data_snip = value
 
-        def __str__(self):
-            target_str = "Address: " + "0x{:02x}".format(self.address) + " (" + str(self.address) + ")\n"
-            if self.reboot_pgn is not None:
-                target_str += "Boot message PGN: " + "0x{:04x}".format(self.reboot_pgn) + " (" + str(
-                    self.reboot_pgn) + ")\n"
-            if self.reboot_data is not None:
-                target_str += "Boot message data contains: " + self.reboot_data
-
+        def has_user_set_reboot_data_snip(self):
+            if self.__reboot_data_snip is None:
+                return False
+            return True
 
 
     def __init__(self, devil):
@@ -126,7 +136,7 @@ class J1939Fuzzer:
 
         self.baseline = []
         self.baseline_messages = []
-        self.fuzz_list = []
+        self.test_cases = []
 
         self.devil = devil
         self.done_fuzzing = False
@@ -135,15 +145,16 @@ class J1939Fuzzer:
         self.lock_fuzzed_messages = threading.RLock()
 
         self.settings = [
-            self.Setting("baseline_time", int, 60, 10, 10000,
-                          "the amount of time to record the baseline for, in seconds."),
+            # TODO: change default to 60
+            self.Setting("baseline_time", int, 10, 10, 10000,
+                         "the amount of time to record the baseline for, in seconds."),
             self.Setting("check_frequency", int, 20, 1, 10000,
-                          "how long to wait between analysing for anomalies, in seconds."),
+                         "how long to wait between analysing for anomalies, in seconds."),
             self.Setting("num_messages", int, 5000, 1, 100000),
             self.Setting("message_frequency", float, 0.5, 0.1, 1000.0,
-                          "the amount of time to wait between sending each fuzzed message, in seconds."),
+                         "the amount of time to wait between sending each fuzzed message, in seconds."),
             self.Setting("mode", int, 0, 0, 2,
-                          "There are 3 modes: mutational (0), generational (1), mutational/generational (2). "),
+                         "There are 3 modes: mutational (0), generational (1), mutational/generational (2). "),
             self.Setting("test_case_priority", int, 0, 0, 7,
                          "Priority set for each test case."),
             self.Setting("mutate_priority", bool, False, None, None,
@@ -161,9 +172,9 @@ class J1939Fuzzer:
             self.Setting("mutate_data", bool, False, None, None,
                          "Should the generator mutate the data field?"),
             self.Setting("diff_tolerance", int, 5, 1, 1000,
-                          "the acceptable difference in the volume of messages between the "
-                          "baseline and the current interval to determine if a crash has occurred. "
-                          "A percentage value is expected."),
+                         "the acceptable difference in the volume of messages between the "
+                         "baseline and the current interval to determine if a crash has occurred. "
+                         "A percentage value is expected."),
         ]
 
     def save_setting(self, setting, value):
@@ -177,6 +188,11 @@ class J1939Fuzzer:
         for idx, s in enumerate(self.settings):
             if item == s.name:
                 return self.settings[idx].value
+
+    def has_user_set(self, setting):
+        for idx, s in enumerate(self.settings):
+            if setting == s.name:
+                return self.settings[idx].has_user_set
 
     def show_settings(self):
         for s in self.settings:
@@ -248,7 +264,8 @@ class J1939Fuzzer:
             3) generate random data length and random data
     '''
 
-    def generate(self, priority=random.randint(0, 7), pgn=None, dst_addr=random.randint(0, 255), src_addr=random.randint(0, 255), data=None, option=None):
+    def generate(self, priority=random.randint(0, 7), pgn=None, dst_addr=random.randint(0, 255),
+                 src_addr=random.randint(0, 255), data=None, option=None):
         if pgn is None:
             if dst_addr == 255:
                 pgn = random.randint(0, 65535)  # include destination specific and broadcast PGNs
@@ -352,8 +369,17 @@ class J1939Fuzzer:
                     after_fuzz[m.src_addr]['pgns'][m.pgn] += 1
                 if len(self.targets) > 0:
                     for t in self.targets:
-                        if t.address == m.src_addr and t.reboot_pgn == m.pgn and t.reboot_data in m.data:
-                            after_fuzz[m.src_addr]['boot_msg_found'] = True
+                        if t.address == m.src_addr:
+                            after_fuzz[m.src_addr]['boot_msg_found'] = False
+                            if t.has_user_set_reboot_pgn() and t.has_user_set_reboot_data_snip():
+                                if t.reboot_pgn == m.pgn and t.reboot_data_snip in m.data:
+                                    after_fuzz[m.src_addr]['boot_msg_found'] = True
+                            elif t.has_user_set_reboot_pgn():
+                                if t.reboot_pgn == m.pgn:
+                                    after_fuzz[m.src_addr]['boot_msg_found'] = True
+                            elif t.has_user_set_reboot_data_snip():
+                                if t.reboot_data_snip in m.data:
+                                    after_fuzz[m.src_addr]['boot_msg_found'] = True
             addresses = [t.address for t in self.targets] if len(self.targets) != 0 else list(range(0, 256))
             for src in addresses:
                 anomaly = False
@@ -406,7 +432,7 @@ class J1939Fuzzer:
                     self.fuzzed_messages.clear()
 
     def create_fuzz_list(self):
-
+        self.test_cases = []
         for i in range(0, self.num_messages):
             choice = self.mode
             # either mutate or generate
@@ -417,22 +443,30 @@ class J1939Fuzzer:
                 mutate_index = random.randint(0, len(self.baseline_messages) - 1)
                 m = copy.copy(self.baseline_messages[mutate_index])
                 # TODO: make these parameters based on settings
-                if self.priority:
-                    m.priority = self.priority
+                if self.has_user_set("test_case_priority"):
+                    m.priority = self.test_case_priority
+                if self.has_user_set("test_case_src_address"):
+                    m.src_addr = self.test_case_src_address
+                if self.has_user_set("test_case_pgn"):
+                    m.pgn = self.test_case_pgn
+                if self.has_user_set("test_case_data"):
+                    m.data = self.test_case_data
+                mutate_dst_address = True
+                if len(self.targets) > 0:
+                    which = random.randint(0, len(self.targets))
+                    target_addr = self.targets[which].address
+                    m.dst_addr = target_addr
+                    mutate_dst_address = False
 
-                #if self.src_addr:
-                #    self.baseline_messages[mutate_index].src_addr = self.src_addr
-
-                m = self.mutate(m, self.mutate_priority,
-                                self.mutate_src_addr,
-                                self.mutate_dst_addr,
-                                self.mutate_pgn, self.mutate_data)
+                m = self.mutate(m, self.mutate_priority, self.mutate_src_address, mutate_dst_address, self.mutate_pgn,
+                                self.mutate_data)
             # generate a message
             elif choice == 1:
                 # TODO: make these parameters based on settings
                 # (priority=random.randint(0, 7), pgn=None, dst_addr=random.randint(0, 255), src_addr=random.randint(0, 255), data=None, option=None):
+                # m = self.generate(self.test_case_priority, self.test_case_pgn, self.)
                 m = self.generate(src_addr=0x00, dst_addr=0x0B)
-            self.fuzz_list.append(m)
+            self.test_cases.append(m)
         return
 
     def record_baseline(self):
@@ -457,8 +491,6 @@ class J1939Fuzzer:
         print("Baselining complete.")
 
 
-
-
 # https://stackoverflow.com/questions/3160699/python-progress-bar/34482761#34482761
 def progressbar(it, prefix="", size=60, file=sys.stdout):
     count = len(it)
@@ -477,7 +509,6 @@ def progressbar(it, prefix="", size=60, file=sys.stdout):
 
 
 class FuzzerCommands(cmd.Cmd):
-
     intro = "Welcome to the TruckDevil J1939 Fuzzer."
     prompt = "(truckdevil.fuzz) "
 
@@ -506,6 +537,9 @@ class FuzzerCommands(cmd.Cmd):
         """
         argv = arg.split()
         name = argv[0]
+        if len(argv) == 1:
+            print("expected value, see 'help set'")
+            return
         for s in self.fz.settings:
             if s.name == name:
                 if s.datatype is bool:
@@ -514,7 +548,10 @@ class FuzzerCommands(cmd.Cmd):
                     elif argv[1] in ["False", "false", "off", 0]:
                         s.value = False
                 elif s.datatype is int:
-                    s.value = int(argv[1])
+                    if argv[1].startswith("0x"):
+                        s.value = int(argv[1], 16)
+                    else:
+                        s.value = int(argv[1])
                 elif s.datatype is float:
                     s.value = float(argv[1])
                 else:
@@ -561,7 +598,14 @@ class FuzzerCommands(cmd.Cmd):
         tgtcmd = safe_get(argv, 0, None)
         if tgtcmd is None or tgtcmd == "list":
             for tgt in self.fz.targets:
-                print("address: {:<3} pgn {:<5} data {}".format(tgt.address, tgt.reboot_pgn, tgt.reboot_data_snip))
+                pgn = "not set"
+                data_snip = "not set"
+                if tgt.has_user_set_reboot_pgn():
+                    pgn = tgt.reboot_pgn
+                if tgt.has_user_set_reboot_data_snip():
+                    data_snip = tgt.reboot_data_snip
+                # TODO: has_user_set flags aren't working for target
+                print("address: {:<3} pgn: {:<5} data: {}".format(tgt.address, pgn, data_snip))
             return
 
         if "clear" == argv[0]:
@@ -580,7 +624,7 @@ class FuzzerCommands(cmd.Cmd):
                     for idx, t in enumerate(self.fz.targets):
                         if t.address == addr:
                             tmp = self.fz.targets[:idx]
-                            tmp.extend(self.fz.targets[idx+1:])
+                            tmp.extend(self.fz.targets[idx + 1:])
                             self.fz.targets = tmp
 
             except ValueError as e:
@@ -611,11 +655,11 @@ class FuzzerCommands(cmd.Cmd):
 
         return
 
-    def do_recored_baseline(self, arg):
+    def do_record_baseline(self, arg):
         """
         Record a baseline for fuzzing against
         """
-        self.fz.recored_baseline()
+        self.fz.record_baseline()
         if len(self.fz.baseline) == 0:
             print("No messages detected during baseline.")
         return
@@ -644,6 +688,9 @@ class FuzzerCommands(cmd.Cmd):
         if len(self.fz.baseline) == 0:
             print("No baseline recorded yet. See 'help record_baseline'")
             return
+        if len(self.fz.test_cases) == 0:
+            print("No test cases generated yet. See 'help generate_test_cases'")
+            return
 
         self.fz.done_fuzzing = False
         self.fz.pause_fuzzing = False
@@ -654,7 +701,7 @@ class FuzzerCommands(cmd.Cmd):
         anomaly_check_thread.start()
         try:
             for i in progressbar(range(self.fz.num_messages), "Sending: ", 40):
-                m = generated_messages[i]
+                m = self.fz.test_cases[i]
                 # TODO: re-enable sending
                 # self.fz.devil.sendMessage(m)
                 with self.fz.lock_fuzzed_messages:
