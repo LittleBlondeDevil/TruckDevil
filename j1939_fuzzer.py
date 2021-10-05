@@ -1,3 +1,5 @@
+import argparse
+import cmd
 import time
 import random
 import threading, queue
@@ -8,27 +10,124 @@ import sys
 
 import truckDevil as td
 
-
 class J1939Fuzzer:
+
+    class Setting:
+        def __init__(self, name, datatype, dval, minval=None, maxval=None, description=None):
+            self.name = name
+            self.datatype = datatype
+            self.dval = dval
+            self.__d = description
+            self.max = maxval
+            self.min = minval
+            self.__v = dval
+
+        @property
+        def describe(self):
+            if isinstance(self.__v, list):
+                listval = "[{}]".format(len(self.__v))
+                desc = "{:<18} {:>12} (default: [0])".format(self.name, listval)
+            else:
+                desc = "{:<18} {:>12} (default: {:<5}) ".format(self.name, self.value, self.dval)
+
+            if self.__d is None:
+                return desc
+            return "{} {}".format(desc, self.__d)
+
+        @property
+        def value(self):
+            return self.__v
+
+        @value.setter
+        def value(self, v):
+
+            if not isinstance(v, self.datatype):
+                print("{} must be of type {}".format(
+                    self.name, self.datatype
+                ))
+                return
+
+            if (self.max is not None and v > self.max) or (self.min is not None and v < self.min):
+                print("{} value restricted to the range [{} .. {}]".format(
+                    self.name, self.min, self.max
+                ))
+                return
+
+            self.__v = v
+            return
+
+    class Target:
+        def __init__(self, address, reboot_pgn=None, reboot_data_snip=None):
+
+            self.__addr = 0
+            self.__reboot_pgn = 0
+            self.__reboot_data = ""
+
+            self.address = address
+            self.reboot_pgn = reboot_pgn or 60928
+            self.reboot_data_snip = reboot_data_snip or ""
+
+        @property
+        def address(self):
+            return self.__addr
+
+        @address.setter
+        def address(self, value):
+            if isinstance(value, str):
+                if value.startswith("0x"):
+                    value = int(value, 16)
+                else:
+                    value = int(value)
+
+            if 0 <= value <= 255:
+                self.__addr = value
+            else:
+                raise ValueError("addresses must be between 0 and 255")
+            return
+
+
+        @property
+        def reboot_pgn(self):
+            return self.__reboot_pgn
+
+        @reboot_pgn.setter
+        def reboot_pgn(self, value):
+
+            if isinstance(value, str) and value.startswith("0x"):
+                value = int(value, 16)
+
+            if isinstance(value, int):
+                if 0 <= value <= 65535:
+                    self.__reboot_pgn = value
+                else:
+                    print("Valid reboot_pgn values are between 0 and 65535")
+
+        @property
+        def reboot_data_snip(self):
+            return self.__reboot_data
+
+        @reboot_data_snip.setter
+        def reboot_data_snip(self, value):
+            if isinstance(value, str) and value.startswith("0x"):
+                self.__reboot_data = value
+
+        def __str__(self):
+            target_str = "Address: " + "0x{:02x}".format(self.address) + " (" + str(self.address) + ")\n"
+            if self.reboot_pgn is not None:
+                target_str += "Boot message PGN: " + "0x{:04x}".format(self.reboot_pgn) + " (" + str(
+                    self.reboot_pgn) + ")\n"
+            if self.reboot_data is not None:
+                target_str += "Boot message data contains: " + self.reboot_data
+
+
+
     def __init__(self, devil):
-        # how long to record messages on the BUS for
-        self.baseline_time = 20
-        # analyze every X seconds
-        self.check_frequency = 20
-        # how many messages to send during fuzzing
-        self.num_messages = 5000
-        # time to sleep between sending messages
-        self.message_frequency = 0.5
-        # 0 = mutate, 1 = generate, or 2 = mutate/generate
-        self.mode = 0
-        # percent
-        self.diff_tolerance = 5
+
         self.targets = []  # Each target should have an optional field to specify what message is sent from the ECU
-        # after restarting, default is Address Claimed message
-        self.testable_pgns = []
 
         self.baseline = []
         self.baseline_messages = []
+        self.fuzz_list = []
 
         self.devil = devil
         self.done_fuzzing = False
@@ -36,142 +135,38 @@ class J1939Fuzzer:
         self.fuzzed_messages = []
         self.lock_fuzzed_messages = threading.RLock()
 
-        self.modifiable = {'btime': 'baseline_time', 'afreq': 'check_frequency', 'sfreq': 'message_frequency',
-                           'mode': 'mode', 'tolerance': 'diff_tolerance', 'msgtotal': 'num_messages',
-                           'pgns': 'testable_pgns'}
+        self.settings = [
+            self.Setting("baseline_time", int, 60, 10, 10000,
+                          "the amount of time to record the baseline for, in seconds."),
+            self.Setting("check_frequency", int, 20, 1, 10000,
+                          "how long to wait between analysing for anomalies, in seconds."),
+            self.Setting("num_messages", int, 5000, 1, 100000),
+            self.Setting("message_frequency", float, 0.5, 0.1, 1000.0,
+                          "the amount of time to wait between sending each fuzzed message, in seconds."),
+            self.Setting("mode", int, 0, 0, 2,
+                          "There are 3 modes: mutational (0), generational (1), mutational/generational (2). "),
+            self.Setting("diff_tolerance", int, 5, 1, 1000,
+                          "the acceptable difference in the volume of messages between the "
+                          "baseline and the current interval to determine if a crash has occurred. "
+                          "A percentage value is expected."),
+        ]
 
     def save_setting(self, setting, value):
-        set_field = True
-        if self.modifiable[setting]:
-            if setting == "btime" and (not isinstance(value, int) or value <= 0):
-                print("Baseline time must be an integer > 0")
-                set_field = False
-            elif setting == "afreq" and (not isinstance(value, int) or value <= 0):
-                print("Analysis Frequency must be an integer > 0")
-                set_field = False
-            elif setting == "sfreq" and (not isinstance(value, float) or value <= 0):
-                print("Send Frequency must be a decimal > 0")
-                set_field = False
-            elif setting == "mode" and (not isinstance(value, int) or value < 0 or value > 2):
-                print("Mode must be between 0-2")
-                set_field = False
-            elif setting == "tolerance" and (not isinstance(value, int) or value < 0):
-                print("Tolerance Difference must be a positive integer")
-                set_field = False
-            # TODO: add checking for pgns lists
-            if set_field:
-                setattr(self, self.modifiable[setting], value)
-        else:
-            print("That setting does not exist")
+        for idx, s in enumerate(self.settings):
+            if setting == s.name:
+                self.settings[idx].value = value
+                return
+        print("setting {} not found.".format(setting))
 
-    def modify_targets(self):
-        # TODO: pretty print this
-        # print("Current Targets : " + str([str(t) for t in self.targets]))
-        print("Add Target: 'add [address]'")
-        print("Delete Target: 'delete [address]'")
-        print("Clear Targets: 'clear'")
-        command = input("Select an option (? for help, q to return): ")
-        if "add" in command:
-            while True:
-                try:
-                    address = int(command.partition("add")[2].strip())
-                    break
-                except ValueError:
-                    print("Specified address must be between 0-255")
-            if 0 <= address < 256:
-                if len([t for t in self.targets if t.address == address]) > 0:
-                    replace = input("Address already in target list, replace it? (y or n) ")
-                    if replace != "y" and replace != "yes":
-                        return
-                print("Most ECUs send a message when it first boots, which may help indicate a crash. For "
-                      "instance, the J1939 standard requires each ECU send an Address Claimed message before "
-                      "other communication (PGN 60928), but proprietary protocol messages are also sometimes "
-                      "present.")
-                option = input("Does this target send a specific message when it reboots? (y or n) ")
-                if option == "y" or option == "yes":
-                    while True:
-                        try:
-                            pgn = int(input("What PGN is the message? (Default: 60928) "))
-                            break
-                        except ValueError:
-                            print("PGN must be between 0-65535")
-                    if 0 <= pgn < 65536:
-                        while True:
-                            data_snip = input("What hex string data does the message contain? (e.g. "
-                                              "'1122AABB', or '' to exclude) ").strip("0x")
-                            try:
-                                if len(data_snip) > 0:
-                                    int(data_snip, 16)
-                            except ValueError:
-                                print("Data string must be in hexadecimal format")
-                                continue
-                            target = self.Target(address, pgn, data_snip)
-                            self.targets.append(target)
-                            break
-                else:
-                    target = self.Target(address)
-                    self.targets.append(target)
-            else:
-                print("Specified address must be between 0-255")
-        elif "delete" in command:
-            address = command.partition("delete")[2].strip()
-            if isinstance(address, int) and address >= 0 or address < 256:
-                if len([t for t in self.targets if t.address == address]) > 0:
-                    self.targets.remove(address)
-                else:
-                    print("Target not in list")
-            else:
-                print("Specified address must be between 0-255")
-        elif "clear" in command:
-            confirm = input("Are you sure you want to clear all target info? (y or n) ")
-            if confirm == "y" or confirm == "yes":
-                self.targets = []
+    def __getattr__(self, item):
+        for idx, s in enumerate(self.settings):
+            if item == s.name:
+                return self.settings[idx].value
 
-    def describe_setting(self, setting):
-        if self.modifiable[setting]:
-            if setting == "btime":
-                print("Baseline time is the amount of time to record the baseline for, in seconds. (Default: 60)")
-            elif setting == "afreq":
-                print("Analysis Frequency is how long to wait between analysing for anomalies, in seconds. (Default: "
-                      "20)")
-            elif setting == "sfreq":
-                print("Send Frequency is the amount of time to wait between sending each fuzzed message, in seconds. "
-                      "(Default: 0.5)")
-            elif setting == "mode":
-                # TODO: add more info here
-                print("There are 3 modes: mutational (0), generational (1), mutational/generational (2). ")
-            elif setting == "tolerance":
-                print("Tolerance Difference is the acceptable difference in the volume of messages between the "
-                      "baseline and the current interval to determine if a crash has occurred. A percentage value is "
-                      "expected. (Default: 5%)")
-            # TODO: add descriptions for targets and pgns lists
-        else:
-            print("That setting does not exist")
-
-    def settings_menu(self):
-        fuzz_str = "\n***** Fuzzer Settings *****"
-        fuzz_str += "\nBaseline Time(btime): " + str(self.baseline_time) + "s | Analysis Frequency(afreq): " + str(
-            self.check_frequency) + "s"
-        fuzz_str += "\nSend Frequency(sfreq): " + str(self.message_frequency) + " | Fuzz mode(mode): " + str(self.mode)
-        fuzz_str += "\nTotal Messages (msgtotal): " + str(self.num_messages) + " | "
-        fuzz_str += "\nTolerance Difference(tolerance): " + str(self.diff_tolerance) + "%"
-        if len(self.targets) == 0:
-            fuzz_str += "\nTarget Addresses: ALL"
-        else:
-            fuzz_str += "\nTarget Addresses: "
-            for target in self.targets:
-                fuzz_str += str(target)
-        if len(self.testable_pgns) == 0:
-            fuzz_str += "\nTestable PGNs(pgns): ALL"
-        else:
-            fuzz_str += "\nTestable PGNs(pgns): "
-            for pgn in self.testable_pgns:
-                fuzz_str += str(pgn)
-                # TODO: pretty print this so a large list does not break it
-                # maybe make it so they have to choose either a specific PGN, or destination-specific/broadcast ranges?
-        fuzz_str += "\n\nView detailed description of setting with command 'NAME ?'"
-        fuzz_str += "\nChange setting with command 'NAME=VALUE'"
-        return fuzz_str
+    def show_settings(self):
+        for s in self.settings:
+            print(s.describe)
+        return
 
     '''
     given a J1939_Message, mutate different parts of it randomly depending on the arguments
@@ -402,7 +397,7 @@ class J1939Fuzzer:
                     self.fuzzed_messages.clear()
 
     def create_fuzz_list(self):
-        fuzz_list = []
+
         for i in range(0, self.num_messages):
             choice = self.mode
             # either mutate or generate
@@ -420,8 +415,8 @@ class J1939Fuzzer:
             elif choice == 1:
                 # TODO: make these parameters based on settings
                 m = self.generate(src_addr=0x00, dst_addr=0x0B)
-            fuzz_list.append(m)
-        return fuzz_list
+            self.fuzz_list.append(m)
+        return
 
     def record_baseline(self):
         self.devil._m2.flushInput()
@@ -444,19 +439,7 @@ class J1939Fuzzer:
                 self.baseline[m.src_addr]['pgns'][m.pgn] += 1
         print("Baselining complete.")
 
-    class Target:
-        def __init__(self, address, reboot_pgn=None, reboot_data_snip=None):
-            self.address = address
-            self.reboot_pgn = reboot_pgn
-            self.reboot_data = reboot_data_snip
 
-        def __str__(self):
-            target_str = "Address: " + "0x{:02x}".format(self.address) + " (" + str(self.address) + ")\n"
-            if self.reboot_pgn is not None:
-                target_str += "Boot message PGN: " + "0x{:04x}".format(self.reboot_pgn) + " (" + str(
-                    self.reboot_pgn) + ")\n"
-            if self.reboot_data is not None:
-                target_str += "Boot message data contains: " + self.reboot_data
 
 
 # https://stackoverflow.com/questions/3160699/python-progress-bar/34482761#34482761
@@ -476,86 +459,212 @@ def progressbar(it, prefix="", size=60, file=sys.stdout):
     file.flush()
 
 
-def main_mod(devil):
-    print("\n***** J1939 Fuzzer *****\n"
-          "  1) View settings\n"
-          "  2) Record baseline\n"
-          "  3) View baseline results\n"
-          "  4) Set targets\n"
-          "  5) Start Fuzzer")
-    fuzzer = J1939Fuzzer(devil)
-    while True:
-        fuzz_select = input("\nSelect an option (? for help, q to return): ")
-        if fuzz_select == "q" or fuzz_select == "quit" or fuzz_select == "exit":
-            return
-        elif fuzz_select == "1":
-            print(fuzzer.settings_menu())
-        elif fuzz_select == "2":
-            fuzzer.record_baseline()
-            if len(fuzzer.baseline) == 0:
-                print("No messages detected during the baseline.")
-        elif fuzz_select == "3":
-            if len(fuzzer.baseline) == 0:
-                print("Baseline has not been recorded yet.")
-            else:
-                # TODO: pretty print the baseline results
-                # print(str(fuzzer.baseline))
-                print("Baseline time: " + str(len(fuzzer.baseline_messages) / fuzzer.baseline_time) + " per second")
-        elif fuzz_select == "4":
-            fuzzer.modify_targets()
-        elif fuzz_select == "5":
-            if len(fuzzer.baseline) == 0:
-                q = input("Baseline has not been recorded yet. Record now (y or n)? ")
-                if q == "y" or q == "yes":
-                    fuzzer.record_baseline()
-                    if len(fuzzer.baseline) == 0:
-                        print("No messages detected during the baseline.")
-                        continue
+class FuzzerCommands(cmd.Cmd):
+
+    intro = "Welcome to the TruckDevil J1939 Fuzzer."
+    prompt = "(truckdevil.fuzz) "
+
+    def __init__(self, devil):
+        super().__init__()
+        self.fz = J1939Fuzzer(devil)
+
+    def do_settings(self, arg):
+        """Show the settings and each setting value"""
+        self.fz.show_settings()
+        return
+
+    def do_set(self, arg):
+        """
+        Provide a setting name and a value to set the setting. For a list of
+        available settings and their current and default values see the
+        settings command.
+
+        example:
+        set baseline_time 100
+
+        For list type settings pass a space separated list
+
+        example:
+        set testable_pgns one two three
+        """
+        argv = arg.split()
+        name = argv[0]
+        for s in self.fz.settings:
+            if s.name == name:
+                if s.datatype is int:
+                    s.value = int(argv[1])
+                elif s.datatype is float:
+                    s.value = float(argv[1])
                 else:
-                    continue
-            print("Creating " + str(fuzzer.num_messages) + " messages to fuzz...")
-            generated_messages = fuzzer.create_fuzz_list()
+                    s.value = argv[1:]
+                return
+        print("No setting {} found".format(argv[0]))
+        return
 
-            fuzzer.done_fuzzing = False
-            fuzzer.pause_fuzzing = False
-            fuzzer.fuzzed_messages = []
-            fuzzer.lock_fuzzed_messages = threading.RLock()
+    def do_target(self, arg):
+        """
+        Add, remove, clear, and modify targets
 
-            anomaly_check_thread = threading.Thread(target=fuzzer.anomaly_check, daemon=False)
-            anomaly_check_thread.start()
+        usage: target <(add, modify, remove)> <address> [PGN [REBOOTDATA]]
+
+        Verbs:
+            add         Adds a new target to the end of the list
+            modify      Change an existing target
+            remove      Delete a target from the list
+            list        Show a list of the current targets
+            clear       Empty the list of targets out
+
+        Arguments:
+            address     An address for the target [0..255]
+            PGN         Paramater Group Number (PGN)
+            REBOOTDATA  Message the ECU returns when it reboots
+
+
+        examples:
+        target add 231 60928 0x1122AABB
+        target list
+        target modify 231 66425 0x0
+        target remove 231
+        target clear
+        """
+        argv = arg.split()
+
+        def safe_get(vec, index, default):
             try:
-                for i in progressbar(range(fuzzer.num_messages), "Sending: ", 40):
-                    m = generated_messages[i]
-                    # TODO: re-enable sending
-                    # fuzzer.devil.sendMessage(m)
-                    with fuzzer.lock_fuzzed_messages:
-                        fuzzer.fuzzed_messages.append(m)
-                    time.sleep(fuzzer.message_frequency)
-                    while fuzzer.pause_fuzzing:
-                        time.sleep(1)
-                    if fuzzer.done_fuzzing:
-                        break
-                fuzzer.done_fuzzing = True
-            except KeyboardInterrupt:
-                fuzzer.done_fuzzing = True
-        elif '=' in fuzz_select:
-            setting = fuzz_select.partition('=')[0]
-            value = fuzz_select.partition('=')[2]
-            if setting in fuzzer.modifiable:
-                fuzzer.save_setting(setting, value)
-            else:
-                print("That setting does not exist")
-        elif '?' in fuzz_select:
-            if fuzz_select == "?":
-                print("\n***** J1939 Fuzzer *****\n"
-                      "  1) View settings\n"
-                      "  2) Record baseline\n"
-                      "  3) View baseline results\n"
-                      "  4) Set targets\n"
-                      "  5) Start Fuzzer")
-            else:
-                setting = fuzz_select.partition('?')[0].strip()
-                if setting in fuzzer.modifiable:
-                    fuzzer.describe_setting(setting)
-                else:
-                    print("That setting does not exist")
+                rval = vec[index]
+            except:
+                return default
+            return rval
+
+        tgtcmd = safe_get(argv, 0, None)
+        if tgtcmd is None or tgtcmd == "list":
+            for tgt in self.fz.targets:
+                print("address: {:<3} pgn {:<5} data {}".format(tgt.address, tgt.reboot_pgn, tgt.reboot_data_snip))
+            return
+
+        if "clear" == argv[0]:
+            self.fz.targets.clear()
+            return
+
+        if len(argv) <= 1:
+            print("address expected:\n"
+                  "\tusage: target <(add, modify, remove)> <address> [PGN [REBOOTDATA]]")
+            return
+
+        if "remove" == argv[0]:
+            try:
+                for addr in argv[1:]:
+                    addr = int(addr)
+                    for idx, t in enumerate(self.fz.targets):
+                        if t.address == addr:
+                            tmp = self.fz.targets[:idx]
+                            tmp.extend(self.fz.targets[idx+1:])
+                            self.fz.targets = tmp
+
+            except ValueError as e:
+                print("error: {}".format(e))
+            return
+
+        addr = safe_get(argv, 1, -1)
+        pgn = safe_get(argv, 2, None)
+        data = safe_get(argv, 3, None)
+
+        if "modify" == argv[0]:
+            for idx, t in enumerate(self.fz.targets):
+                if t.address == addr:
+                    self.fz.targets[idx] = self.fz.Target(addr, pgn, data)
+            return
+
+        if "add" == argv[0]:
+            try:
+                newtgt = self.fz.Target(addr, pgn, data)
+            except ValueError as e:
+                print("Error: {}".format(e))
+                return
+
+            self.fz.targets.append(newtgt)
+            return
+
+        print("unrecognized command: {}".format(argv[0]))
+
+        return
+
+    def do_recored_baseline(self, arg):
+        """
+        Record a baseline for fuzzing against
+        """
+        self.fz.recored_baseline()
+        if len(self.fz.baseline) == 0:
+            print("No messages detected during baseline.")
+        return
+
+    def do_show_baseline(self, arg):
+        """
+        Show the baseline results
+        """
+        if len(self.fz.baseline) == 0:
+            print("No baseline has been recorded yet. See the record baseline command.")
+        print("Recorded {:<6} messages in {:<6} seconds".format(len(self.fz.baseline), self.fz.baseline_time))
+        print("Baseline time: {:<6} messages per second".format(len(self.fz.baseline) / self.fz.baseline_time))
+
+    def do_generate_test_cases(self, arg):
+        """
+        Generate the messages the fuzzer will send during the fuzzing
+        """
+        print("Creating " + str(self.fz.num_messages) + " messages to fuzz...")
+        generated_messages = self.fz.create_fuzz_list()
+        return
+
+    def do_start_fuzzer(self, arg):
+        """
+        Start the fuzzer
+        """
+        if len(self.fz.baseline) == 0:
+            print("No baseline recorded yet. See 'help record_baseline'")
+            return
+
+
+
+        self.fz.done_fuzzing = False
+        self.fz.pause_fuzzing = False
+        self.fz.fuzzed_messages = []
+        self.fz.lock_fuzzed_messages = threading.RLock()
+
+        anomaly_check_thread = threading.Thread(target=self.fz.anomaly_check, daemon=False)
+        anomaly_check_thread.start()
+        try:
+            for i in progressbar(range(self.fz.num_messages), "Sending: ", 40):
+                m = generated_messages[i]
+                # TODO: re-enable sending
+                # self.fz.devil.sendMessage(m)
+                with self.fz.lock_fuzzed_messages:
+                    self.fz.fuzzed_messages.append(m)
+                time.sleep(self.fz.message_frequency)
+                while self.fz.pause_fuzzing:
+                    time.sleep(1)
+                if self.fz.done_fuzzing:
+                    break
+            self.fz.done_fuzzing = True
+        except KeyboardInterrupt:
+            self.fz.done_fuzzing = True
+
+        return
+
+    @staticmethod
+    def do_back(self, arg=None):
+        """
+        Return to the main menu
+        """
+        return True
+
+    @staticmethod
+    def do_EOF(self, arg=None):
+        """
+        Following a ctrl-d quit the whole program
+        """
+        sys.exit(0)
+
+
+def main_mod(devil):
+    fcli = FuzzerCommands(devil)
+    fcli.cmdloop()
