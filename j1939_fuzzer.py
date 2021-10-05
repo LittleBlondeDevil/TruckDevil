@@ -20,15 +20,15 @@ class J1939Fuzzer:
             self.__d = description
             self.max = maxval
             self.min = minval
-            self.__v = dval
+            self.value = dval
 
         @property
         def describe(self):
             if isinstance(self.__v, list):
                 listval = "[{}]".format(len(self.__v))
-                desc = "{:<18} {:>12} (default: [0])".format(self.name, listval)
+                desc = "{:<24} {:>12} (default: [0])".format(self.name, listval)
             else:
-                desc = "{:<18} {:>12} (default: {:<5}) ".format(self.name, self.value, self.dval)
+                desc = "{:<24} {:>12} (default: {:<5}) ".format(self.name, self.value, self.dval)
 
             if self.__d is None:
                 return desc
@@ -42,8 +42,8 @@ class J1939Fuzzer:
         def value(self, v):
 
             if not isinstance(v, self.datatype):
-                print("{} must be of type {}".format(
-                    self.name, self.datatype
+                print("{} must be of type {} {} but was {}".format(
+                    self.name, self.datatype, type(self.__v), type(v)
                 ))
                 return
 
@@ -122,7 +122,6 @@ class J1939Fuzzer:
 
 
     def __init__(self, devil):
-
         self.targets = []  # Each target should have an optional field to specify what message is sent from the ECU
 
         self.baseline = []
@@ -145,6 +144,22 @@ class J1939Fuzzer:
                           "the amount of time to wait between sending each fuzzed message, in seconds."),
             self.Setting("mode", int, 0, 0, 2,
                           "There are 3 modes: mutational (0), generational (1), mutational/generational (2). "),
+            self.Setting("test_case_priority", int, 0, 0, 7,
+                         "Priority set for each test case."),
+            self.Setting("mutate_priority", bool, False, None, None,
+                         "Should the generator mutate the test case priority field?"),
+            self.Setting("test_case_pgn", int, 0, 0, 65535,
+                         "PGN value set on each test case"),
+            self.Setting("mutate_pgn", bool, False, None, None,
+                         "Should the generator mutate the test case pgn?"),
+            self.Setting("test_case_src_address", int, 0, 0, 255,
+                         "Source address to set for each test case"),
+            self.Setting("mutate_src_address", bool, False, None, None,
+                         "Should the generator mutate the source address?"),
+            self.Setting("test_case_data", str, "", None, None,
+                         "Data to be set for the test case"),
+            self.Setting("mutate_data", bool, False, None, None,
+                         "Should the generator mutate the data field?"),
             self.Setting("diff_tolerance", int, 5, 1, 1000,
                           "the acceptable difference in the volume of messages between the "
                           "baseline and the current interval to determine if a crash has occurred. "
@@ -233,80 +248,74 @@ class J1939Fuzzer:
             3) generate random data length and random data
     '''
 
-    def generate(self, priority=None, pgn=None, dst_addr=None, src_addr=None, data=None, option=None):
-        if (priority == None):
-            priority = random.randint(0, 7)
-        if (dst_addr == None):
-            dst_addr = random.randint(0, 255)
-        if (src_addr == None):
-            src_addr = random.randint(0, 255)
-        if (pgn == None):
-            if (dst_addr == 255):
+    def generate(self, priority=random.randint(0, 7), pgn=None, dst_addr=random.randint(0, 255), src_addr=random.randint(0, 255), data=None, option=None):
+        if pgn is None:
+            if dst_addr == 255:
                 pgn = random.randint(0, 65535)  # include destination specific and broadcast PGNs
             else:
                 pgn = random.randint(0, 61439)  # only include destination specific PGNs
 
-        if (pgn <= 255):  # pgn is only 2 hex digits
+        if pgn <= 255:  # pgn is only 2 hex digits
             pgn = 0
-        elif (pgn > 255 and pgn <= 4095):  # pgn is only 3 hex digits
-            pgn = int(hex(pgn)[2:3] + '00', 16)  # only use the first nibble
-        elif (pgn > 4095 and pgn < 61440):  # if in the destination specific range
-            pgn = int(hex(pgn)[2:4] + '00', 16)  # only use the first byte
-        if (data == None):
-            if (option == None or option < 1 or option > 3):
+        elif 255 < pgn <= 4095:  # pgn is only 3 hex digits
+            pgn = pgn & 0xF00  # only use the first nibble
+        elif 4095 < pgn < 61440:  # if in the destination specific range
+            pgn = pgn & 0xFF00  # only use the first byte
+        if data is None:
+            if option is None or 3 < option < 1:
                 option = random.randint(1, 3)
-            if (option == 1):
+            if option == 1:
                 data = ''
                 try:
                     pgn_info = self.devil._pgn_list[str(pgn)]
-                    if (isinstance(pgn_info['pgnDataLength'], int)):
-                        dataLen = pgn_info['pgnDataLength']
+                    if isinstance(pgn_info['pgnDataLength'], int):
+                        data_len = pgn_info['pgnDataLength']
                     else:
                         raise KeyError
-                    spnList = pgn_info['spnList']
+                    spn_list = pgn_info['spnList']
                     bin_data = ''
-                    usedBits = 0
-                    for spn in spnList:
+                    used_bits = 0
+                    for spn in spn_list:
                         spn_info = self.devil._spn_list[str(spn)]
-                        if (isinstance(spn_info['spnLength'], int)):
-                            spnLength = spn_info['spnLength']  # number of bits
+                        if isinstance(spn_info['spnLength'], int):
+                            spn_length = spn_info['spnLength']  # number of bits
                         else:
                             raise KeyError  # length is variable
-                        maxVal = (2 ** spnLength) - 1  # maximum int value for x number of bits (ex: 255 for 8 bits)
+                        max_val = (2 ** spn_length) - 1  # maximum int value for x number of bits (ex: 255 for 8 bits)
 
-                        val = random.randint(0, maxVal)
-                        bin_val = bin(val)[2:].zfill(spnLength)
-                        filler = (spn_info['bitPositionStart'] - usedBits) * '1'
+                        val = random.randint(0, max_val)
+                        bin_val = bin(val)[2:].zfill(spn_length)
+                        filler = (spn_info['bitPositionStart'] - used_bits) * '1'
                         bin_data = bin_val + filler + bin_data
-                        usedBits += spnLength
-                        usedBits += len(filler)
-                    bitsLeft = (dataLen * 8 - usedBits) * '1'
-                    if (len(bitsLeft) > 0):
-                        data = (hex(int(bitsLeft + bin_data, 2))[2:]).upper()
+                        used_bits += spn_length
+                        used_bits += len(filler)
+                    bits_left = (data_len * 8 - used_bits) * '1'
+                    if len(bits_left) > 0:
+                        data = (hex(int(bits_left + bin_data, 2))[2:]).upper()
                     else:
                         data = (hex(int(bin_data, 2))[2:].zfill(int(len(bin_data) / 4))).upper()
 
                 except KeyError:
                     option = 2
-            if (option == 2):
+            if option == 2:
                 try:
                     pgn_info = self.devil._pgn_list[str(pgn)]
-                    if (isinstance(pgn_info['pgnDataLength'], int)):
-                        dataLen = pgn_info[
-                            'pgnDataLength']  # number of bytes to generate is based on data length specified in pgn
+                    if isinstance(pgn_info['pgnDataLength'], int):
+                        data_len = pgn_info['pgnDataLength']  # number of bytes to generate is based on data length
+                        # specified in pgn
                     else:
-                        dataLen = random.randint(0,
-                                                 1785)  # number of bytes to generate is random if pgn exists but the length is variable
+                        data_len = random.randint(0, 1785)  # number of bytes to generate is random if pgn exists but
+                        # the length is variable
                 except KeyError:
-                    dataLen = random.randint(0, 1785)  # number of bytes to generate is random if pgn does not exist
+                    data_len = random.randint(0, 1785)  # number of bytes to generate is random if pgn does not exist
                 data = ''
-                for i in range(0, dataLen):
+                for i in range(0, data_len):
                     data_byte = hex(random.randint(0, 255))[2:].zfill(2)
                     data += data_byte
-            if (option == 3):
-                dataLen = random.randint(0, 1785)  # number of bytes to generate
+            if option == 3:
+                data_len = random.randint(0, 1785)  # number of bytes to generate
                 data = ''
-                for i in range(0, dataLen):
+                for i in range(0, data_len):
                     data_byte = hex(random.randint(0, 255))[2:].zfill(2)
                     data += data_byte
         message = td.J1939_Message(priority, pgn, dst_addr, src_addr, data)
@@ -406,14 +415,22 @@ class J1939Fuzzer:
             # mutate a message from the baseline
             if choice == 0:
                 mutate_index = random.randint(0, len(self.baseline_messages) - 1)
+                m = copy.copy(self.baseline_messages[mutate_index])
                 # TODO: make these parameters based on settings
-                m = self.mutate(self.baseline_messages[mutate_index], mutate_priority=False,
-                                mutate_src_addr=False,
-                                mutate_dst_addr=False,
-                                mutate_pgn=False, mutate_data=True)
+                if self.priority:
+                    m.priority = self.priority
+
+                #if self.src_addr:
+                #    self.baseline_messages[mutate_index].src_addr = self.src_addr
+
+                m = self.mutate(m, self.mutate_priority,
+                                self.mutate_src_addr,
+                                self.mutate_dst_addr,
+                                self.mutate_pgn, self.mutate_data)
             # generate a message
             elif choice == 1:
                 # TODO: make these parameters based on settings
+                # (priority=random.randint(0, 7), pgn=None, dst_addr=random.randint(0, 255), src_addr=random.randint(0, 255), data=None, option=None):
                 m = self.generate(src_addr=0x00, dst_addr=0x0B)
             self.fuzz_list.append(m)
         return
@@ -491,7 +508,12 @@ class FuzzerCommands(cmd.Cmd):
         name = argv[0]
         for s in self.fz.settings:
             if s.name == name:
-                if s.datatype is int:
+                if s.datatype is bool:
+                    if argv[1] in ["True", "true", "on", 1]:
+                        s.value = True
+                    elif argv[1] in ["False", "false", "off", 0]:
+                        s.value = False
+                elif s.datatype is int:
                     s.value = int(argv[1])
                 elif s.datatype is float:
                     s.value = float(argv[1])
@@ -612,7 +634,7 @@ class FuzzerCommands(cmd.Cmd):
         Generate the messages the fuzzer will send during the fuzzing
         """
         print("Creating " + str(self.fz.num_messages) + " messages to fuzz...")
-        generated_messages = self.fz.create_fuzz_list()
+        self.fz.create_fuzz_list()
         return
 
     def do_start_fuzzer(self, arg):
@@ -622,8 +644,6 @@ class FuzzerCommands(cmd.Cmd):
         if len(self.fz.baseline) == 0:
             print("No baseline recorded yet. See 'help record_baseline'")
             return
-
-
 
         self.fz.done_fuzzing = False
         self.fz.pause_fuzzing = False
