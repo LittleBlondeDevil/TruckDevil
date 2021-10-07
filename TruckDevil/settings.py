@@ -3,6 +3,7 @@ Settings management for TruckDevil
 """
 from typing import Any
 from collections.abc import Callable
+from textwrap import fill
 
 
 class Setting:
@@ -88,7 +89,8 @@ class Setting:
         return self
 
     def __str__(self):
-        return "{:<24} {:>12} (default: {:<5}) ".format(self.name, self.value, self.default_value)
+        return fill("{:<24} {:>12} (default: {:<5}) {:<}".format(
+            self.name, self.value, self.default_value, self.description), width=120, subsequent_indent=" "*55)
 
 
 class SettingsManager:

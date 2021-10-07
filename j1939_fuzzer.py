@@ -14,7 +14,6 @@ from TruckDevil.settings import SettingsManager, Setting
 
 
 class J1939Fuzzer:
-
     class Target:
         def __init__(self, address, reboot_pgn=None, reboot_data_snip=None):
 
@@ -52,15 +51,15 @@ class J1939Fuzzer:
 
         @reboot_pgn.setter
         def reboot_pgn(self, value):
-
-            if isinstance(value, str) and value.startswith("0x"):
-                value = int(value, 16)
-
-            if isinstance(value, int):
-                if 0 <= value <= 65535:
-                    self.__reboot_pgn = value
+            if isinstance(value, str):
+                if value.startswith("0x"):
+                    value = int(value, 16)
                 else:
-                    print("Valid reboot_pgn values are between 0 and 65535")
+                    value = int(value)
+            if 0 <= value <= 65535:
+                self.__reboot_pgn = value
+            else:
+                raise ValueError("Valid reboot_pgn values are between 0 and 65535")
 
         def has_user_set_reboot_pgn(self):
             if self.__reboot_pgn is None:
@@ -73,17 +72,29 @@ class J1939Fuzzer:
 
         @reboot_data_snip.setter
         def reboot_data_snip(self, value):
-            if isinstance(value, str) and value.startswith("0x"):
-                self.__reboot_data_snip = value
+            if value.startswith("0x"):
+                value = value.strip("0x")
+            if len(value) % 2 != 0 or len(value) > 3570:
+                raise ValueError('Length of data must be an even number and shorter than 1785 bytes')
+            int(value, 16)  # should raise ValueError if not hexadecimal string
+            self.__reboot_data_snip = value
 
         def has_user_set_reboot_data_snip(self):
             if self.__reboot_data_snip is None:
                 return False
             return True
 
+        def __str__(self):
+            pgn = "not set"
+            data_snip = "not set"
+            if self.has_user_set_reboot_pgn():
+                pgn = self.reboot_pgn
+            if self.has_user_set_reboot_data_snip():
+                data_snip = self.reboot_data_snip
+            return "address: {:<3} reboot_pgn: {:<5} reboot_data_snip: {}".format(self.address, pgn, data_snip)
 
     def __init__(self, devil):
-        self.targets = []  # Each target should have an optional field to specify what message is sent from the ECU
+        self._targets = []  # Each target should have an optional field to specify what message is sent from the ECU
 
         self.baseline = []
         self.baseline_messages = []
@@ -97,57 +108,121 @@ class J1939Fuzzer:
 
         self.sm = SettingsManager()
         sl = [
-            # TODO: change default to 60
-            Setting("baseline_time", 10).add_constraint("minimum", lambda x: 10 <= x)
-                .add_description("the amount of time to record the baseline for, in seconds."),
+            Setting("baseline_time", 60).add_constraint("minimum", lambda x: 10 <= x)
+                .add_description("The amount of time to record the baseline for, in seconds."),
+
+            Setting("num_messages", 5000).add_constraint("minimum", lambda x: 1 <= x)
+                .add_description("Number of test cases to generate"),
+
+            Setting("mode", 0).add_constraint("allowed_states", lambda x: 0 <= x <= 2)
+                .add_description("There are 3 modes to create test cases: 0 - mutational, 1 - generational"
+                                 "2 - mutational/generational. "),
+
+            Setting("generate_data_option", 0).add_constraint("allowed_states", lambda x: 0 <= x <= 2)
+                .add_description("When performing generational fuzzing, there are 3 options: 0 - Generate test case "
+                                 "data based on J1939 standard, 1 - Generate test case data randomly with standard "
+                                 "length, 2 - Generate test case data randomly with random length"),
 
             Setting("check_frequency", 20).add_constraint("minimum", lambda x: 1 <= x)
                 .add_description("how long to wait between analysing for anomalies, in seconds."),
 
-            Setting("num_messages", 5000).add_constraint("minimum", lambda x: 1 <= x)
-                .add_description("number of test cases to generate"),
-
             Setting("message_frequency", 0.5).add_constraint("minimum", lambda x: 0.0 <= x)
                 .add_description("the amount of time to wait between sending each fuzzed message, in seconds."),
 
-            Setting("mode", 0).add_constraint("allowed_states", lambda x: 0 <= x <= 2)
-                .add_description("There are 3 modes: mutational (0), generational (1), mutational/generational (2). "),
+            Setting("diff_tolerance", 5).add_constraint("minimum", lambda x: 0 <= x)
+                .add_description(
+                "the acceptable difference in the volume of messages between the "
+                "baseline and the current interval to determine if a crash has occurred. "
+                "A percentage value is expected."),
 
             Setting("test_case_priority", 0).add_constraint("range", lambda x: 0 <= x <= 7)
                 .add_description("Priority set for each test case."),
 
-            Setting("mutate_priority", False).add_constraint("boolean", lambda x: type(x) is bool)
-                .add_description("Should the generator mutate the test case priority field?"),
-
             Setting("test_case_pgn", 0).add_constraint("range", lambda x: 0 <= x <= 65535)
                 .add_description("PGN value set on each test case"),
 
-            Setting("mutate_pgn", False).add_constraint("boolean", lambda x: type(x) is bool)
-                .add_description("Should the generator mutate the test case pgn?"),
-
             Setting("test_case_src_address", 0).add_constraint("range", lambda x: 0 <= x <= 255)
                 .add_description("Source address to set for each test case"),
-
-            Setting("mutate_src_address", False).add_constraint("boolean", lambda x: type(x) is bool)
-                .add_description("Should the generator mutate the source address?"),
 
             Setting("test_case_data", "")
                 .add_constraint("max_length", lambda x: len(x) <= (2 * 1785))
                 .add_constraint("even_bytes", lambda x: len(x) % 2 == 0)
                 .add_description("Data to be set for the test case"),
 
+            Setting("mutate_priority", False).add_constraint("boolean", lambda x: type(x) is bool)
+                .add_description("Should the generator mutate the test case priority field?"),
+
+            Setting("mutate_pgn", False).add_constraint("boolean", lambda x: type(x) is bool)
+                .add_description("Should the generator mutate the test case pgn?"),
+
+            Setting("mutate_src_address", False).add_constraint("boolean", lambda x: type(x) is bool)
+                .add_description("Should the generator mutate the source address?"),
+
             Setting("mutate_data", False).add_constraint("boolean", lambda x: type(x) is bool)
                 .add_description("Should the generator mutate the data field?"),
 
-            Setting("diff_tolerance", 5).add_constraint("minimum", lambda x: 0 <= x)
-                .add_description(
-                         "the acceptable difference in the volume of messages between the "
-                         "baseline and the current interval to determine if a crash has occurred. "
-                         "A percentage value is expected."),
+            Setting("mutate_data_length", False).add_constraint("boolean", lambda x: type(x) is bool)
+                .add_description("Should the generator mutate the length of the data field?")
         ]
 
         for setting in sl:
             self.sm.add_setting(setting)
+
+    @property
+    def targets(self):
+        """
+        Get the list of targets
+
+        :return: the targets list
+        """
+        return self._targets
+
+    def add_target(self, tgt):
+        """
+        Add a target object to the targets list, if it doesn't exist
+
+        :param tgt: target object to add to list
+        """
+        if tgt.address not in [t.address for t in self.targets]:
+            self._targets.append(tgt)
+            return
+        raise ValueError("Target with this address already exists")
+
+    def remove_target(self, address):
+        """
+        Remove a target object from the targets list
+
+        :param address: Address of target object to remove from list
+        """
+        if isinstance(address, str):
+            if address.startswith("0x"):
+                address = int(address, 16)
+            else:
+                address = int(address)
+
+        for idx, t in enumerate(self._targets):
+            if t.address == address:
+                tmp = self._targets[:idx]
+                tmp.extend(self._targets[idx + 1:])
+                self._targets = tmp
+
+    def modify_target(self, address, pgn, data):
+        """
+        Modify the reboot PGN and data snippet of a target
+
+        :param address: Address of target
+        :param pgn: new reboot PGN
+        :param data: new reboot data snippet
+        """
+        if isinstance(address, str):
+            if address.startswith("0x"):
+                address = int(address, 16)
+            else:
+                address = int(address)
+
+        for idx, t in enumerate(self._targets):
+            if t.address == address:
+                self._targets[idx] = self.Target(address, pgn, data)
 
     '''
     given a J1939_Message, mutate different parts of it randomly depending on the arguments
@@ -199,39 +274,49 @@ class J1939Fuzzer:
                     message.data += data_byte
         return message
 
-    '''
-    Generate and return a J1939_Message based on optional parameters.
-    priority: optional int, if not given then generate a random one between 0-7
-    pgn: optional int, if not given then generate a random one between 0-65535
-    dst_addr: optional int, if not given then generate a random one between 0-255
-    src_addr: optional int, if not given then generate a random one between 0-255
-    data: optional hex string, if not given then generate a hex string based on one of three options
-    option: optional int (1-3), if not given then generate a random option between 1-3
-            1) generate data based on the pgn, data length and format matching the specified pgn
+    def generate(self, option=0, **test_case_values):
+        """
+        Generate and return a J1939_Message based on optional parameters.
+
+        :param option: optional int (0-2), if not given then generate a random option between 0-2
+            0) generate data based on the pgn, data length and format matching the specified pgn
                in this case, all of the data within will be generated based on acceptable ranges
                for example, if field is 1 byte long, it will be between 0-255 (even if operationally it only allows 0-200)
-            2) generate data randomly based on data length of specified pgn
-            3) generate random data length and random data
-    '''
-
-    def generate(self, priority=random.randint(0, 7), pgn=None, dst_addr=random.randint(0, 255),
-                 src_addr=random.randint(0, 255), data=None, option=None):
+            1) generate data randomly based on data length of specified pgn
+            2) generate random data length and random data
+        :param test_case_values:
+            See below
+        :Keyword Arguments:
+            priority: optional int, if not given then generate a random one between 0-7
+            pgn: optional int, if not given then generate a random one between 0-65535
+            dst_addr: optional int, if not given then generate a random one between 0-255
+            src_addr: optional int, if not given then generate a random one between 0-255
+            data: optional hex string, if not given then generate a hex string based on one of three options
+        :return: J1939_Message object containing the generated message
+        """
+        priority = test_case_values.setdefault("priority", random.randint(0, 7))
+        dst_addr = test_case_values.setdefault("dst_addr", random.randint(0, 255))
+        src_addr = test_case_values.setdefault("src_addr", random.randint(0, 255))
+        pgn = test_case_values.setdefault("pgn", None)
+        data = test_case_values.setdefault("data", None)
         if pgn is None:
-            if dst_addr == 255:
-                pgn = random.randint(0, 65535)  # include destination specific and broadcast PGNs
-            else:
+            destination_specific = random.randint(0, 1)
+            if destination_specific:
                 pgn = random.randint(0, 61439)  # only include destination specific PGNs
-
+            else:
+                pgn = random.randint(61440, 65535)  # broadcast range
         if pgn <= 255:  # pgn is only 2 hex digits
             pgn = 0
         elif 255 < pgn <= 4095:  # pgn is only 3 hex digits
             pgn = pgn & 0xF00  # only use the first nibble
         elif 4095 < pgn < 61440:  # if in the destination specific range
             pgn = pgn & 0xFF00  # only use the first byte
+        if pgn == 60928 and option == 0:
+            option = 1
         if data is None:
-            if option is None or 3 < option < 1:
-                option = random.randint(1, 3)
-            if option == 1:
+            if 2 < option < 0:
+                option = random.randint(0, 2)
+            if option == 0:
                 data = ''
                 try:
                     pgn_info = self.devil._pgn_list[str(pgn)]
@@ -252,19 +337,20 @@ class J1939Fuzzer:
 
                         val = random.randint(0, max_val)
                         bin_val = bin(val)[2:].zfill(spn_length)
-                        filler = (spn_info['bitPositionStart'] - used_bits) * '1'
-                        bin_data = bin_val + filler + bin_data
+                        bin_data = bin_data + bin_val
                         used_bits += spn_length
-                        used_bits += len(filler)
+                        if spn_info['bitPositionStart'] > used_bits:
+                            filler = (spn_info['bitPositionStart'] - used_bits) * '1'
+                            bin_data = bin_data + filler
+                            used_bits += len(filler)
                     bits_left = (data_len * 8 - used_bits) * '1'
                     if len(bits_left) > 0:
-                        data = (hex(int(bits_left + bin_data, 2))[2:]).upper()
+                        data = (hex(int(bin_data + bits_left, 2))[2:].zfill(data_len*2)).upper()
                     else:
                         data = (hex(int(bin_data, 2))[2:].zfill(int(len(bin_data) / 4))).upper()
-
                 except KeyError:
-                    option = 2
-            if option == 2:
+                    option = 1
+            if option == 1:
                 try:
                     pgn_info = self.devil._pgn_list[str(pgn)]
                     if isinstance(pgn_info['pgnDataLength'], int):
@@ -279,7 +365,7 @@ class J1939Fuzzer:
                 for i in range(0, data_len):
                     data_byte = hex(random.randint(0, 255))[2:].zfill(2)
                     data += data_byte
-            if option == 3:
+            if option == 2:
                 data_len = random.randint(0, 1785)  # number of bytes to generate
                 data = ''
                 for i in range(0, data_len):
@@ -300,7 +386,7 @@ class J1939Fuzzer:
         while not self.done_fuzzing:
             self.devil._m2.flushInput()
             self.devil.startDataCollection()
-            time.sleep(self.check_frequency)
+            time.sleep(self.sm.check_frequency)
             if self.done_fuzzing:
                 break
             incoming_messages = self.devil.stopDataCollection()
@@ -320,7 +406,6 @@ class J1939Fuzzer:
                 if len(self.targets) > 0:
                     for t in self.targets:
                         if t.address == m.src_addr:
-                            after_fuzz[m.src_addr]['boot_msg_found'] = False
                             if t.has_user_set_reboot_pgn() and t.has_user_set_reboot_data_snip():
                                 if t.reboot_pgn == m.pgn and t.reboot_data_snip in m.data:
                                     after_fuzz[m.src_addr]['boot_msg_found'] = True
@@ -334,8 +419,8 @@ class J1939Fuzzer:
             for src in addresses:
                 anomaly = False
                 message = ""
-                base_per_sec = self.baseline[src]['total_messages'] / self.baseline_time
-                curr_per_sec = after_fuzz[src]['total_messages'] / self.check_frequency
+                base_per_sec = self.baseline[src]['total_messages'] / self.sm.baseline_time
+                curr_per_sec = after_fuzz[src]['total_messages'] / self.sm.check_frequency
                 if after_fuzz[src]['boot_msg_found']:
                     anomaly = True
                     any_anomalies = True
@@ -346,7 +431,7 @@ class J1939Fuzzer:
                     message = "The baseline had messages for this node, but this interval did not."
                 elif curr_per_sec > 0:
                     percent_diff = ((abs(base_per_sec - curr_per_sec)) / ((base_per_sec + curr_per_sec) / 2)) * 100
-                    if percent_diff > self.diff_tolerance:
+                    if percent_diff > self.sm.diff_tolerance:
                         anomaly = True
                         any_anomalies = True
                         message = "Number of messages changed by " + "{:.2f}".format(percent_diff) + "%"
@@ -383,8 +468,8 @@ class J1939Fuzzer:
 
     def create_fuzz_list(self):
         self.test_cases = []
-        for i in range(0, self.num_messages):
-            choice = self.mode
+        for i in range(0, self.sm.num_messages):
+            choice = self.sm.mode
             # either mutate or generate
             if choice == 2:
                 choice = random.randint(0, 1)
@@ -392,7 +477,6 @@ class J1939Fuzzer:
             if choice == 0:
                 mutate_index = random.randint(0, len(self.baseline_messages) - 1)
                 m = copy.copy(self.baseline_messages[mutate_index])
-                # TODO: make these parameters based on settings
                 if self.sm["test_case_priority"].updated:
                     m.priority = self.sm.test_case_priority
                 if self.sm["test_case_src_address"].updated:
@@ -403,7 +487,7 @@ class J1939Fuzzer:
                     m.data = self.sm.test_case_data
                 mutate_dst_address = True
                 if len(self.targets) > 0:
-                    which = random.randint(0, len(self.targets))
+                    which = random.randint(0, len(self.targets) - 1)
                     target_addr = self.targets[which].address
                     m.dst_addr = target_addr
                     mutate_dst_address = False
@@ -413,14 +497,24 @@ class J1939Fuzzer:
                                 self.sm.mutate_src_address,
                                 mutate_dst_address,
                                 self.sm.mutate_pgn,
-                                self.sm.mutate_data)
+                                self.sm.mutate_data,
+                                self.sm.mutate_data_length)
 
             # generate a message
             elif choice == 1:
-                # TODO: make these parameters based on settings
-                # (priority=random.randint(0, 7), pgn=None, dst_addr=random.randint(0, 255), src_addr=random.randint(0, 255), data=None, option=None):
-                # m = self.generate(self.test_case_priority, self.test_case_pgn, self.)
-                m = self.generate(src_addr=0x00, dst_addr=0x0B)
+                test_case_values = {}
+                if self.sm["test_case_priority"].updated:
+                    test_case_values["priority"] = self.sm.test_case_priority
+                if self.sm["test_case_src_address"].updated:
+                    test_case_values["src_addr"] = self.sm.test_case_src_address
+                if self.sm["test_case_pgn"].updated:
+                    test_case_values["pgn"] = self.sm.test_case_pgn
+                if self.sm["test_case_data"].updated:
+                    test_case_values["data"] = self.sm.test_case_data
+                if len(self.targets) > 0:
+                    which = random.randint(0, len(self.targets) - 1)
+                    test_case_values["dst_addr"] = self.targets[which].address
+                m = self.generate(option=self.sm.generate_data_option, **test_case_values)
             self.test_cases.append(m)
         return
 
@@ -464,6 +558,7 @@ def progressbar(it, prefix="", size=60, file=sys.stdout):
 
 
 class FuzzerCommands(cmd.Cmd):
+    # TODO: add save and load commands to save/load settings/test cases/baseline/targets
     intro = "Welcome to the TruckDevil J1939 Fuzzer."
     prompt = "(truckdevil.fuzz) "
 
@@ -475,6 +570,24 @@ class FuzzerCommands(cmd.Cmd):
         """Show the settings and each setting value"""
         print(self.fz.sm)
         return
+    def do_save(self, arg):
+        """
+        Save settings, targets, generated test cases, baseline, or all information.
+
+        usage: save <(all, settings, targets, test_cases, baseline)>
+
+        Verbs:
+            all         Saves settings, targets, test_cases, and baseline info
+            settings    Saves all current settings
+            targets     Saves list of targets
+            test_cases  Saves list of generated test cases
+            baseline    Saves the baseline information for all nodes
+        """
+        argv = arg.split()
+        selection = argv[0]
+        if len(argv) == 1:
+            print("expected value, see 'help save'")
+            return
 
     def do_set(self, arg):
         """
@@ -484,11 +597,6 @@ class FuzzerCommands(cmd.Cmd):
 
         example:
         set baseline_time 100
-
-        For list type settings pass a space separated list
-
-        example:
-        set testable_pgns one two three
         """
         argv = arg.split()
         name = argv[0]
@@ -551,14 +659,7 @@ class FuzzerCommands(cmd.Cmd):
         tgtcmd = safe_get(argv, 0, None)
         if tgtcmd is None or tgtcmd == "list":
             for tgt in self.fz.targets:
-                pgn = "not set"
-                data_snip = "not set"
-                if tgt.has_user_set_reboot_pgn():
-                    pgn = tgt.reboot_pgn
-                if tgt.has_user_set_reboot_data_snip():
-                    data_snip = tgt.reboot_data_snip
-                # TODO: has_user_set flags aren't working for target
-                print("address: {:<3} pgn: {:<5} data: {}".format(tgt.address, pgn, data_snip))
+                print(tgt)
             return
 
         if "clear" == argv[0]:
@@ -574,12 +675,7 @@ class FuzzerCommands(cmd.Cmd):
             try:
                 for addr in argv[1:]:
                     addr = int(addr)
-                    for idx, t in enumerate(self.fz.targets):
-                        if t.address == addr:
-                            tmp = self.fz.targets[:idx]
-                            tmp.extend(self.fz.targets[idx + 1:])
-                            self.fz.targets = tmp
-
+                    self.fz.remove_target(addr)
             except ValueError as e:
                 print("error: {}".format(e))
             return
@@ -589,9 +685,7 @@ class FuzzerCommands(cmd.Cmd):
         data = safe_get(argv, 3, None)
 
         if "modify" == argv[0]:
-            for idx, t in enumerate(self.fz.targets):
-                if t.address == addr:
-                    self.fz.targets[idx] = self.fz.Target(addr, pgn, data)
+            self.fz.modify_target(addr, pgn, data)
             return
 
         if "add" == argv[0]:
@@ -601,11 +695,10 @@ class FuzzerCommands(cmd.Cmd):
                 print("Error: {}".format(e))
                 return
 
-            self.fz.targets.append(newtgt)
+            self.fz.add_target(newtgt)
             return
 
         print("unrecognized command: {}".format(argv[0]))
-
         return
 
     def do_record_baseline(self, arg):
@@ -621,15 +714,18 @@ class FuzzerCommands(cmd.Cmd):
         """
         Show the baseline results
         """
-        if len(self.fz.baseline) == 0:
+        if len(self.fz.baseline_messages) == 0:
             print("No baseline has been recorded yet. See the record baseline command.")
-        print("Recorded {:<6} messages in {:<6} seconds".format(len(self.fz.baseline), self.fz.sm.baseline_time))
-        print("Baseline time: {:<6} messages per second".format(len(self.fz.baseline) / self.fz.sm.baseline_time))
+        print("Recorded {:<6} messages in {:<6} seconds".format(len(self.fz.baseline_messages), self.fz.sm.baseline_time))
+        print("Baseline time: {:<6} messages per second".format(len(self.fz.baseline_messages) / self.fz.sm.baseline_time))
 
     def do_generate_test_cases(self, arg):
         """
         Generate the messages the fuzzer will send during the fuzzing
         """
+        if len(self.fz.baseline) == 0 and (self.fz.sm.mode != 1):
+            print("No baseline recorded yet. See 'help record_baseline'")
+            return
         print("Creating " + str(self.fz.sm.num_messages) + " messages to fuzz...")
         self.fz.create_fuzz_list()
         return
@@ -652,11 +748,12 @@ class FuzzerCommands(cmd.Cmd):
 
         anomaly_check_thread = threading.Thread(target=self.fz.anomaly_check, daemon=False)
         anomaly_check_thread.start()
+
         try:
             for i in progressbar(range(self.fz.sm.num_messages), "Sending: ", 40):
                 m = self.fz.test_cases[i]
-                # TODO: re-enable sending
-                # self.fz.devil.sendMessage(m)
+                #print(m)
+                self.fz.devil.sendMessage(m)
                 with self.fz.lock_fuzzed_messages:
                     self.fz.fuzzed_messages.append(m)
                 time.sleep(self.fz.sm.message_frequency)
