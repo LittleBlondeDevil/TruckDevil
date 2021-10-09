@@ -1,4 +1,3 @@
-import struct
 import serial
 import threading
 import time
@@ -6,41 +5,22 @@ import math
 import copy
 import json
 import os
-import binascii
 import can
 
 
-class TruckDevil:
-    def __init__(self, device_type='m2', port=None, channel='can0', can_baud=0):
+class J1939Interface:
+    def __init__(self, device):
         """
-        Initializes TruckDevil
+        Initializes truckdevil
 
         :param device_type: either "m2" or "socketcan" (Default value = 'm2').
         :param port: serial port that the M2 is connected to, if used. For example: COM7 or /dev/ttyX. 0 if not using M2."
         :param channel: CAN channel to send/receive on. For example: can0, can1, or vcan0. (Default value = 'can0')
         :param can_baud: baudrate on the CAN bus. Most common are 250000 and 500000. Use 0 for autobaud detection. (Default value = 0)
         """
-        if (device_type == 'm2'):
-            if (port == None):
-                raise Exception('No serial port specified for M2')
-            self._m2 = serial.Serial(
-                port=port, baudrate=115200,
-                dsrdtr=True
-            )
-            self._m2.setDTR(True)
+        self._device = device
+        if device.m2_used:
             self._lockM2 = threading.RLock()
-
-            # Ensure that can_baud is filled to 7 digits
-            baudToSend = '#' + str(can_baud).zfill(7)
-            if (channel == "can0" or channel == "can1"):
-                baudToSend += channel
-            else:
-                baudToSend += "can0"
-            self._m2.write(baudToSend.encode('utf-8'))
-            self._m2used = True
-        else:
-            self._socketcan_bus = can.interface.Bus(bustype=device_type, channel=channel, bitrate=can_baud)
-            self._m2used = False
 
         self._conversations = []
         self._lockConversations = threading.RLock()
@@ -59,66 +39,60 @@ class TruckDevil:
         self._printMessagesTimer = None
 
         self._pgn_list = {}
-        with open(os.path.join('resources', 'pgn_list.json')) as pgn_file:
+        with open(os.path.join('resources', 'json_files', 'pgn_list.json')) as pgn_file:
             self._pgn_list = json.load(pgn_file)
 
         self._spn_list = {}
-        with open(os.path.join('resources', 'spn_list.json')) as spn_file:
+        with open(os.path.join('resources', 'json_files', 'spn_list.json')) as spn_file:
             self._spn_list = json.load(spn_file)
 
         self._src_addr_list = {}
-        with open(os.path.join('resources', 'src_addr_list.json')) \
+        with open(os.path.join('resources', 'json_files', 'src_addr_list.json')) \
                 as src_addr_file:
             self._src_addr_list = json.load(src_addr_file)
 
         self._bit_decoding_list = {}
-        with open(os.path.join('resources', 'dataBitDecoding.json')) \
+        with open(os.path.join('resources', 'json_files', 'dataBitDecoding.json')) \
                 as bit_decoding_file:
             self._bit_decoding_list = json.load(bit_decoding_file)
 
         self._UDS_services_list = {}
-        with open(os.path.join('resources', 'UDS_services.json')) \
+        with open(os.path.join('resources', 'json_files', 'UDS_services.json')) \
                 as UDS_services_file:
             self._UDS_services_list = json.load(UDS_services_file)
 
         self._UDS_functions_list = {}
-        with open(os.path.join('resources', 'UDS_functions.json')) \
+        with open(os.path.join('resources', 'json_files', 'UDS_functions.json')) \
                 as UDS_functions_file:
             self._UDS_functions_list = json.load(UDS_functions_file)
 
         self._UDS_NRC_list = {}
-        with open(os.path.join('resources', 'UDS_NRC.json')) \
+        with open(os.path.join('resources', 'json_files', 'UDS_NRC.json')) \
                 as UDS_NRC_file:
             self._UDS_NRC_list = json.load(UDS_NRC_file)
 
-    def done(self):
-        """Close the Serial connection to M2."""
-        with self._lockM2:
-            self._m2.close()
-
-    def startDataCollection(self, abstractTPM=True):
+    def start_data_collection(self, abstractTPM=True):
         """
         Starts reading and storing messages
 
         :param abstractTPM: whether to abstract multipacket messages or instead to show all Transport Protocol messages (Default value = True)
         """
-        if (self._dataCollectionOccurring == True):
+        if self._dataCollectionOccurring:
             raise Exception('data collection already started')
         with self._lockCollectedMessages:
             self._collectedMessages = []
 
         self._dataCollectionOccurring = True
 
-        if (self._collectionThread == None or
-                # If collectionThread hasn't been started before
-                self._collectionThread.is_alive() == False):
+        if self._collectionThread is None or self._collectionThread.is_alive() is False:
+            # If collectionThread hasn't been started before
             self._collectionThread = threading.Thread(
                 target=self._readMessage, args=(abstractTPM,),
                 daemon=True
             )
             self._collectionThread.start()
 
-    def getCurrentCollectedData(self):
+    def get_collected_data(self):
         """
         Gets all of the messages that have been collected
 
@@ -128,13 +102,13 @@ class TruckDevil:
             messages = self._collectedMessages
         return messages
 
-    def stopDataCollection(self):
+    def stop_data_collection(self):
         """
         Stops reading and storing messages, resets all data
 
         :returns: the collectedMessages list
         """
-        if (self._dataCollectionOccurring == False):
+        if not self._dataCollectionOccurring:
             raise Exception('data collection is already stopped')
         self._dataCollectionOccurring = False
         with self._lockConversations:
@@ -142,53 +116,50 @@ class TruckDevil:
         with self._lockUDSConversations:
             self._UDSconversations = []
         with self._lockCollectedMessages:
-            dataCollected = self._collectedMessages
+            data_collected = self._collectedMessages
             self._collectedMessages = []
-        return dataCollected
+        return data_collected
 
-    def saveDataCollected(self, messages,
-                          fileName=None, verbose=False):
+    def save_data_collected(self, messages, file_name=None, verbose=False):
         """
         Save the collected messages to a file
 
         :param messages: the collected messages outputted from stopDataCollection
-        :param fileName: the name of the file to save the data to. If not specified, defaults to: "m2_collected_data_[time]"
+        :param file_name: the name of the file to save the data to. If not specified, defaults to: "m2_collected_data_[time]"
         :param verbose: whether or not to save the message in decoded form (Default value = False)
         """
         # If given messages list is empty
-        if (len(messages) == 0):
+        if len(messages) == 0:
             raise Exception('messages list is empty')
-        if (fileName == None):
-            fileName = 'm2_collected_data_' + str(int(time.time()))
-        f = open(fileName, "x")
+        if file_name is None:
+            file_name = 'm2_collected_data_' + str(int(time.time()))
+        f = open(file_name, "x")
         f.write("""Priority    PGN    Source --> Destination    [Num Bytes]    data""" + '\n')
         for m in messages:
-            if (verbose == False):
+            if not verbose:
                 f.write(str(m) + '\n')
             else:
-                f.write(self.getDecodedMessage(m) + '\n')
+                f.write(self.get_decoded_message(m) + '\n')
         f.close()
 
-    def importDataCollected(self, fileName):
+    def import_data_collected(self, file_name):
         """
         Converts log file to list of J1939_Message objects
 
-        :param fileName: the name of the file where the data is saved
+        :param file_name: the name of the file where the data is saved
         :returns: list of J1939_Message objects from log file
         """
         messages = []
-        if (os.path.exists(fileName)):
-            with open(fileName, 'r') as inFile:
-                firstLine = True
+        if os.path.exists(file_name):
+            with open(file_name, 'r') as inFile:
+                first_line = True
                 for line in inFile:
-                    if (firstLine):
-                        firstLine = False
+                    if first_line:
+                        first_line = False
                     else:
                         parts = line.split()
-                        if (len(parts) == 7 and
-                                parts[3] == '-->' and
-                                '[' in line):
-                            message = J1939_Message(
+                        if len(parts) == 7 and parts[3] == '-->' and '[' in line:
+                            message = J1939Message(
                                 priority=int(parts[0]),
                                 pgn=int(parts[1], 16),
                                 dst_addr=int(parts[4], 16),
@@ -200,27 +171,25 @@ class TruckDevil:
         else:
             raise Exception('file name given does not exist.')
 
-    def getDecodedMessage(self, message=None):
+    def get_decoded_message(self, message=None):
         """
         Decodes a J1939_Message object into human-readable string
 
         :param message: J1939_Message object to be decoded
         :returns: the decoded message as a string
         """
-        if (isinstance(message, J1939_Message) == False or
-                message == None):
+        if isinstance(message, J1939Message) is False or message is None:
             raise Exception('Must include an instance of a J1939_Message')
         decoded = str(message) + '\n'
         # Only include this portion if src and dest addrs are in list
-        if ((str(message.src_addr) in self._src_addr_list) and
-                (str(message.dst_addr) in self._src_addr_list)):
+        if (str(message.src_addr) in self._src_addr_list) and (str(message.dst_addr) in self._src_addr_list):
             decoded += (
                     '    ' + self._src_addr_list[str(message.src_addr)] +
                     " --> " + self._src_addr_list[str(message.dst_addr)] +
                     '\n'
             )
         # Only include this portion if the pgn of the message is in pgn_list
-        if (str(message.pgn) in self._pgn_list):
+        if str(message.pgn) in self._pgn_list:
             decoded += (
                     '    PGN(' + str(message.pgn) + '): ' +
                     self._pgn_list[str(message.pgn)]['acronym'] +
@@ -231,7 +200,7 @@ class TruckDevil:
                     self._pgn_list[str(message.pgn)]['parameterGroupLabel'] +
                     '\n'
             )
-            if (message.pgn == 0xDA00):
+            if message.pgn == 0xDA00:
                 try:
                     decoded += self._UDSDecode(message)
                 except (ValueError, UnboundLocalError):
@@ -253,7 +222,7 @@ class TruckDevil:
                 # For each spn that is part the given pgn
                 for spn in self._pgn_list[str(message.pgn)]['spnList']:
                     # Only include this portion if the spn is in the spn_list
-                    if (str(spn) in self._spn_list):
+                    if str(spn) in self._spn_list:
                         decoded += (
                                 '      SPN(' +
                                 str(spn) + '): ' +
@@ -263,36 +232,36 @@ class TruckDevil:
                         # Ensure it's not a variable length SPN
                         if (self._spn_list[str(spn)]['spnLength']
                                 != "variable"):
-                            totalBits = self._spn_list[str(spn)]['spnLength']
-                            startBit = self._spn_list[str(spn)]['bitPositionStart']
-                            endBit = startBit + totalBits
+                            total_bits = self._spn_list[str(spn)]['spnLength']
+                            start_bit = self._spn_list[str(spn)]['bitPositionStart']
+                            end_bit = start_bit + total_bits
 
                             bin_data_total = bin(int(message.data, 16))[2:] \
                                 .zfill(int((len(message.data) / 2) * 8))
-                            bin_data = bin_data_total[startBit:endBit]
+                            bin_data = bin_data_total[start_bit:end_bit]
                             extracted_data = int(bin_data, 2)
                             # Swap endianness if greater then 1 byte
-                            if totalBits > 8 and totalBits <= 16:  # (2 bytes)
+                            if 8 < total_bits <= 16:  # (2 bytes)
                                 extracted_data = int.from_bytes(extracted_data.to_bytes(2, byteorder='little'),
                                                                 byteorder='big', signed=False)
-                            if totalBits > 16 and totalBits <= 24:  # (3 bytes)
+                            if 16 < total_bits <= 24:  # (3 bytes)
                                 extracted_data = int.from_bytes(extracted_data.to_bytes(3, byteorder='little'),
                                                                 byteorder='big', signed=False)
-                            if totalBits > 24 and totalBits <= 32:  # (4 bytes)
+                            if 24 < total_bits <= 32:  # (4 bytes)
                                 extracted_data = int.from_bytes(extracted_data.to_bytes(4, byteorder='little'),
                                                                 byteorder='big', signed=False)
-                            if totalBits > 32 and totalBits <= 40:  # (5 bytes)
+                            if 32 < total_bits <= 40:  # (5 bytes)
                                 extracted_data = int.from_bytes(extracted_data.to_bytes(5, byteorder='little'),
                                                                 byteorder='big', signed=False)
-                            if totalBits > 48 and totalBits <= 56:  # (6 bytes)
+                            if 48 < total_bits <= 56:  # (6 bytes)
                                 extracted_data = int.from_bytes(extracted_data.to_bytes(6, byteorder='little'),
                                                                 byteorder='big', signed=False)
-                            if totalBits > 56 and totalBits <= 64:  # (7 bytes)
+                            if 56 < total_bits <= 64:  # (7 bytes)
                                 extracted_data = int.from_bytes(extracted_data.to_bytes(7, byteorder='little'),
                                                                 byteorder='big', signed=False)
 
                             # If all 1's, don't care about value, don't add
-                            if (extracted_data != int("1" * totalBits, 2) or totalBits == 1):
+                            if extracted_data != int("1" * total_bits, 2) or total_bits == 1:
                                 # If bit data type, use bit_decoding_list
                                 if (self._spn_list[str(spn)]['units'] == 'bit'
                                         and str(spn)
@@ -304,7 +273,7 @@ class TruckDevil:
                                             '\n'
                                     )
                                 # if ascii data type, convert
-                                elif (self._spn_list[str(spn)]['units'] == 'ASCII'):
+                                elif self._spn_list[str(spn)]['units'] == 'ASCII':
                                     try:
                                         to_ascii = extracted_data.to_bytes(len(bin_data) // 8, byteorder='big')
                                         decoded += (
@@ -325,7 +294,7 @@ class TruckDevil:
                                         )
                                     except TypeError:
                                         continue
-                                    if (extracted_data.is_integer()):
+                                    if extracted_data.is_integer():
                                         extracted_data = str(int(extracted_data))
                                     else:
                                         extracted_data = "%.2f" % extracted_data
@@ -340,38 +309,36 @@ class TruckDevil:
                 decoded += '      Cannot decode SPNs\n'
         return decoded
 
-    def printMessages(self, abstractTPM=True,
-                      readTime=None, numMessages=None,
-                      verbose=False, logToFile=False):
+    def print_messages(self, abstract_tpm=True, read_time=None, num_messages=None, verbose=False, log_to_file=False):
         """
         Read and print all messages from M2. If readTime and numMessages are both specified, stop printing when whichever one is reached first.
 
-        :param abstractTPM: whether to abstract multipacket messages or instead to show all Transport Protocol messages (Default value = True)
-        :param readTime: the amount of time to print messages for. If not specified, it will not be limited
-        :param numMessages: number of messages to print before stopping. If not specified, it will not be limited
+        :param abstract_tpm: whether to abstract multipacket messages or instead to show all Transport Protocol messages (Default value = True)
+        :param read_time: the amount of time to print messages for. If not specified, it will not be limited
+        :param num_messages: number of messages to print before stopping. If not specified, it will not be limited
         :param verbose: whether or not to print the message in decoded form (Default value = False)
-        :param logToFile: whether or not to log the messages to a file (Default value = False)
+        :param log_to_file: whether or not to log the messages to a file (Default value = False)
         """
         # Only allow if data collection is not occurring
-        if (self._dataCollectionOccurring == True):
+        if self._dataCollectionOccurring:
             raise Exception('stop data collection before proceeding with this function')
         # If optional readTime is utilized
-        if (readTime != None):
+        if read_time is not None:
             self._printMessagesTimer = threading.Timer(
-                readTime, self._setPrintMessagesTimeDone
+                read_time, self._setPrintMessagesTimeDone
             )
             self._printMessagesTimer.start()
-        messagesPrinted = 0
+        messages_printed = 0
         with self._lockConversations:
             self._conversations = []
         with self._lockUDSConversations:
             self._UDSconversations = []
         self._printMessagesTimeDone = False
         # Log to file
-        if (logToFile):
-            fileName = 'm2_collected_data_' + str(int(time.time()))
-            logFile = open(fileName, "x")
-            logFile.write(
+        if log_to_file:
+            file_name = 'm2_collected_data_' + str(int(time.time()))
+            log_file = open(file_name, "x")
+            log_file.write(
                 """Priority    PGN    Source --> Destination
                 [Num Bytes]    data""" + '\n'
             )
@@ -379,9 +346,9 @@ class TruckDevil:
         # messages to print hasn't been reached (whichever comes first).
         # If neither are utilized, keep going forever
         while (self._printMessagesTimeDone == False and
-               (numMessages == None or messagesPrinted < numMessages)):
+               (num_messages is None or messages_printed < num_messages)):
             # Only allow if data collection is not occurring
-            if (self._dataCollectionOccurring == True):
+            if self._dataCollectionOccurring:
                 raise Exception(
                     """data collection began abruptly, stop data collection 
                     before proceeding with this function"""
@@ -390,23 +357,23 @@ class TruckDevil:
             self._lockConversations.acquire()
             for i in range(0, len(self._conversations)):
                 # Found one ready to send - return it
-                if (self._conversations[i].readyToSend):
+                if self._conversations[i].readyToSend:
                     message = self._conversations[i].completeMessage
                     del self._conversations[i]
-                    if (verbose == False):
+                    if not verbose:
                         # Print completed multipacket message
                         print(message)
-                        if (logToFile):
-                            logFile.write(str(message) + '\n')
+                        if log_to_file:
+                            log_file.write(str(message) + '\n')
                     else:
                         # Print the completed multipacket message in decoded form
-                        print(self.getDecodedMessage(message))
-                        if (logToFile):
-                            logFile.write(
-                                self.getDecodedMessage(message) +
+                        print(self.get_decoded_message(message))
+                        if log_to_file:
+                            log_file.write(
+                                self.get_decoded_message(message) +
                                 '\n'
                             )
-                    messagesPrinted = messagesPrinted + 1
+                    messages_printed = messages_printed + 1
                     break
             self._lockConversations.release()
 
@@ -414,30 +381,32 @@ class TruckDevil:
             self._lockUDSConversations.acquire()
             for i in range(0, len(self._UDSconversations)):
                 # Found one ready to send - return it
-                if (self._UDSconversations[i].readyToSend):
+                if self._UDSconversations[i].readyToSend:
                     message = self._UDSconversations[i].completeMessage
                     del self._UDSconversations[i]
-                    if (verbose == False):
+                    if not verbose:
                         # Print the completed ISO-TP message
                         print(message)
-                        if (logToFile):
-                            logFile.write(
+                        if log_to_file:
+                            log_file.write(
                                 str(message) +
                                 '\n'
                             )
                     else:
                         # Print the completed ISO-TP message in decoded form
-                        print(self.getDecodedMessage(message))
-                        if (logToFile):
-                            logFile.write(
-                                self.getDecodedMessage(message) +
+                        print(self.get_decoded_message(message))
+                        if log_to_file:
+                            log_file.write(
+                                self.get_decoded_message(message) +
                                 '\n'
                             )
-                    messagesPrinted = messagesPrinted + 1
+                    messages_printed = messages_printed + 1
                     break
             self._lockUDSConversations.release()
 
             # Get one CAN message from M2 (ex: 18EF0B00080102030405060708)
+            can_msg = self._device.read()
+            """
             can_packet = self._readOneMessage()
 
             # src_addr is byte 4
@@ -452,7 +421,7 @@ class TruckDevil:
 
             # If pdu_format is 0-239 then pdu_specific is dst_addr,
             # otherwise it is group extension
-            if (pdu_format < 240):
+            if pdu_format < 240:
                 dst_addr = pdu_specific
                 # Add 00 to pgn if destination specific
                 # (ex: EC0B pgn becomes EC00 with dst_addr 0x0B)
@@ -469,101 +438,86 @@ class TruckDevil:
 
             # dlc (data length) is byte 5
             dlc = int(can_packet[8:10], 16)
-
+            
             # data is contained in bytes 6-13, in hex string format
             data = can_packet[10:26]
 
-            message = J1939_Message(
+            message = J1939Message(
                 priority, pgn,
                 dst_addr, src_addr,
                 data, dlc
             )
+            """
+            data = ''.join('{:02x}'.format(x) for x in can_msg.data)
+            j1939_message = J1939Message(can_msg.arbitration_id, data)
 
             # Multipacket message received, broadcasted or
             # peer-to-peer request to send
-            if (pgn == 0xec00 and
-                    (data[0:2] == "20" or
-                     data[0:2] == "10")):
-                mp_message = _J1939_MultiPacketMessage(message)
+            if j1939_message.pgn == 0xec00 and (j1939_message.data[0:2] == "20" or j1939_message.data[0:2] == "10"):
+                mp_message = _J1939MultiPacketMessage(j1939_message)
                 with self._lockConversations:
                     self._conversations.append(mp_message)
                 # If abstractTPM is True, break and don't print this message
-                if (abstractTPM == True):
+                if abstract_tpm:
                     continue
 
-            # Multipacket data transfer message recieved
-            if (pgn == 0xeb00):
+            # Multipacket data transfer message received
+            if j1939_message.pgn == 0xeb00:
                 # Find the correct conversation
                 self._lockConversations.acquire()
                 for i in range(0, len(self._conversations)):
                     # Correct conversation found
-                    if (self._conversations[i] \
-                            .completeMessage.src_addr == src_addr and
-                            self._conversations[i] \
-                                    .completeMessage.dst_addr == dst_addr):
+                    if self._conversations[i].completeMessage.src_addr == j1939_message.src_addr \
+                            and self._conversations[i].completeMessage.dst_addr == j1939_message.dst_addr:
                         self._conversations[i].received_packets += 1
                         # Received all the packets
-                        if (self._conversations[i].complete()):
-                            bytes_left = (
-                                    self._conversations[i].num_bytes -
-                                    self._conversations[i].received_bytes
-                            )
-                            self._conversations[i] \
-                                .received_bytes += bytes_left
+                        if self._conversations[i].complete():
+                            bytes_left = (self._conversations[i].num_bytes - self._conversations[i].received_bytes)
+                            self._conversations[i].received_bytes += bytes_left
                             data_index = (bytes_left * 2) + 2
                             # Copy final bytes
-                            self._conversations[i] \
-                                .completeMessage.data += data[2:data_index]
+                            self._conversations[i].completeMessage.data += j1939_message.data[2:data_index]
                             # Ready to send next time a message is read
                             self._conversations[i].readyToSend = True
                             # More packets needed, add 7 bytes of data to stored message
                         else:
                             self._conversations[i].received_bytes += 7
                             # Skip first byte, this is counter
-                            self._conversations[i] \
-                                .completeMessage.data += data[2:16]
+                            self._conversations[i].completeMessage.data += j1939_message.data[2:16]
                         break
                 self._lockConversations.release()
                 # If abstractTPM is True, continue and don't print this message
-                if (abstractTPM == True):
+                if abstract_tpm:
                     continue
             # UDS ISO-TP message received, first frame
-            if (pgn == 0xda00 and
-                    message.data[0:1] == '1'):
-                iso_tp_message = _J1939_ISO_TP_Message(message)
+            if j1939_message.pgn == 0xda00 and j1939_message.data[0:1] == '1':
+                iso_tp_message = _J1939ISOTPMessage(j1939_message)
                 with self._lockUDSConversations:
                     self._UDSconversations.append(iso_tp_message)
                 # If abstractTPM is True, break and don't print this message
-                if (abstractTPM == True):
+                if abstract_tpm:
                     continue
-            # UDS ISO-TP message recieved, consecutive frame
-            elif (pgn == 0xda00 and
-                  message.data[0:1] == '2'):
+            # UDS ISO-TP message received, consecutive frame
+            elif j1939_message.pgn == 0xda00 and j1939_message.data[0:1] == '2':
                 self._lockUDSConversations.acquire()
                 for i in range(0, len(self._UDSconversations)):
                     # Correct UDS message
-                    if (self._UDSconversations[i] \
-                            .completeMessage.src_addr == src_addr and
-                            self._UDSconversations[i] \
-                                    .completeMessage.dst_addr == dst_addr):
+                    if self._UDSconversations[i].completeMessage.src_addr == j1939_message.src_addr and \
+                            self._UDSconversations[i].completeMessage.dst_addr == j1939_message.dst_addr:
                         # The index of this received message
-                        indexByte = int(message.data[1:2], 16)
+                        index_byte = int(j1939_message.data[1:2], 16)
                         # Correct order of data received
-                        if (indexByte == self._UDSconversations[i] \
-                                .nextExpectedIndex):
+                        if index_byte == self._UDSconversations[i].nextExpectedIndex:
                             # Received all data bytes (including the current packet)
-                            if (self._UDSconversations[i] \
-                                    .complete(curr_received=7)):
+                            if self._UDSconversations[i].complete(curr_received=7):
                                 bytes_left = (
                                         self._UDSconversations[i].num_bytes -
                                         self._UDSconversations[i].received_bytes
                                 )
-                                self._UDSconversations[i] \
-                                    .received_bytes += bytes_left
+                                self._UDSconversations[i].received_bytes += bytes_left
                                 data_index = int((bytes_left * 2) + 2)
                                 # Copy final bytes
-                                self._UDSconversations[i].completeMessage \
-                                    .data += data[2:data_index]
+                                self._UDSconversations[i].completeMessage.data += j1939_message.data[2:data_index]
                                 self._UDSconversations[i].completeMessage.total_bytes = (
                                         len(self._UDSconversations[i].completeMessage.data) / 2
                                 )
@@ -573,62 +527,58 @@ class TruckDevil:
                             # to stored message
                             else:
                                 self._UDSconversations[i].received_bytes += 7
-                                self._UDSconversations[i].completeMessage \
-                                    .data += data[2:16]
+                                self._UDSconversations[i].completeMessage.data += j1939_message.data[2:16]
                                 # If indexByte is 15, we start back over
                                 # at 0 for next sequence number
-                                if (indexByte == 15):
-                                    self._UDSconversations[i] \
-                                        .nextExpectedIndex = 0
+                                if index_byte == 15:
+                                    self._UDSconversations[i].nextExpectedIndex = 0
                                 else:
-                                    self._UDSconversations[i] \
-                                        .nextExpectedIndex += 1
+                                    self._UDSconversations[i].nextExpectedIndex += 1
                             break
                             # Something happened, delete?
                         else:
                             del self._UDSconversations[i]
                 self._lockUDSConversations.release()
                 # If abstractTPM is True, break and don't print this message
-                if (abstractTPM == True):
+                if abstract_tpm:
                     continue
-            # UDS ISO-TP message recieved, flow control frame
-            elif (pgn == 0xda00 and
-                  message.data[0:1] == '3'):
+            # UDS ISO-TP message received, flow control frame
+            elif j1939_message.pgn == 0xda00 and j1939_message.data[0:1] == '3':
                 # If abstractTPM is True, break and don't print this message
-                if (abstractTPM == True):
+                if abstract_tpm:
                     continue
             # Print/log the message
-            if (verbose == False):
-                print(message)
-                if (logToFile):
-                    logFile.write(str(message) + '\n')
+            if not verbose:
+                print(j1939_message)
+                if log_to_file:
+                    log_file.write(str(j1939_message) + '\n')
             else:
-                print(self.getDecodedMessage(message))
-                if (logToFile):
-                    logFile.write(self.getDecodedMessage(message) + '\n')
-            messagesPrinted = messagesPrinted + 1
+                print(self.get_decoded_message(j1939_message))
+                if log_to_file:
+                    log_file.write(self.get_decoded_message(j1939_message) + '\n')
+            messages_printed = messages_printed + 1
         # Close the log file before exiting
-        if (logToFile):
-            logFile.close()
-        if (readTime != None):
+        if log_to_file:
+            log_file.close()
+        if read_time is not None:
             self._printMessagesTimer.cancel()
 
-    def readMessagesUntil(self, dataContains=None,
+    def readMessagesUntil(self, data_contains=None,
                           target_src_addr=None, target_dst_addr=None,
                           target_pgn=None):
         """
         Read all messages from M2 until a specific message is found, atleast one parameter should be specified to look for.
 
-        :param dataContains: if specified, the message must contain this hex string in the data portion, ex: "010203"
+        :param data_contains: if specified, the message must contain this hex string in the data portion, ex: "010203"
         :param target_src_addr: if specified, the message must have a src_addr of this parameter, ex: 0xF9
         :param target_dst_addr: if specified, the message must have a dst_addr of this parameter, ex: 0x0B
         :param target_pgn: if specified, the message must have a pgn of this parameter, ex: 0xF004
         :returns: both the message that matched the specified parameters, and the list of messages that were collected while searching
         """
-        if (dataContains == None and
-                target_src_addr == None and
-                target_dst_addr == None and
-                target_pgn == None):
+        if (data_contains is None and
+                target_src_addr is None and
+                target_dst_addr is None and
+                target_pgn is None):
             raise Exception("""atleast one parameter (dataContains, 
                 src_addr, dst_addr, pgn) must be included"""
                             )
@@ -641,15 +591,15 @@ class TruckDevil:
             # if none found, receive from socket
             for i in range(0, len(conversations)):
                 # Found one ready to send - return it
-                if (conversations[i].readyToSend):
+                if conversations[i].readyToSend:
                     message = conversations[i].completeMessage
                     del conversations[i]
                     # Add completed multipacket message to collectedMessages list
                     collectedMessages.append(message)
-                    if ((dataContains == None or dataContains in message.data) and
-                            (target_src_addr == None or message.src_addr == target_src_addr) and
-                            (target_dst_addr == None or message.dst_addr == target_dst_addr) and
-                            (target_pgn == None or message.pgn == target_pgn)):
+                    if ((data_contains is None or data_contains in message.data) and
+                            (target_src_addr is None or message.src_addr == target_src_addr) and
+                            (target_dst_addr is None or message.dst_addr == target_dst_addr) and
+                            (target_pgn is None or message.pgn == target_pgn)):
                         return message, collectedMessages
                     break
 
@@ -657,15 +607,15 @@ class TruckDevil:
             # if none found, receive from socket
             for i in range(0, len(UDS_conversations)):
                 # Found one ready to send - return it
-                if (UDS_conversations[i].readyToSend):
+                if UDS_conversations[i].readyToSend:
                     message = UDS_conversations[i].completeMessage
                     del UDS_conversations[i]
                     # Add completed ISO-TP message to collectedMessages list
                     collectedMessages.append(message)
-                    if ((dataContains == None or dataContains in message.data) and
-                            (target_src_addr == None or message.src_addr == target_src_addr) and
-                            (target_dst_addr == None or message.dst_addr == target_dst_addr) and
-                            (target_pgn == None or message.pgn == target_pgn)):
+                    if ((data_contains is None or data_contains in message.data) and
+                            (target_src_addr is None or message.src_addr == target_src_addr) and
+                            (target_dst_addr is None or message.dst_addr == target_dst_addr) and
+                            (target_pgn is None or message.pgn == target_pgn)):
                         return message, collectedMessages
                     break
 
@@ -684,7 +634,7 @@ class TruckDevil:
 
             # If pdu_format is 0-239 then pdu_specific is dst_addr,
             # otherwise it is group extension
-            if (pdu_format < 240):
+            if pdu_format < 240:
                 dst_addr = pdu_specific
                 # Add 00 to pgn if destination specific
                 # (ex: EC0B pgn becomes EC00 with dst_addr 0x0B)
@@ -703,7 +653,7 @@ class TruckDevil:
 
             # data is contained in bytes 6-13, in hex string format
             data = can_packet[10:26]
-            message = J1939_Message(
+            message = J1939Message(
                 priority, pgn,
                 dst_addr, src_addr,
                 data, dlc
@@ -713,11 +663,11 @@ class TruckDevil:
             # peer-to-peer request to send
             if (pgn == 0xec00 and
                     (data[0:2] == "20" or data[0:2] == "10")):
-                mp_message = _J1939_MultiPacketMessage(message)
+                mp_message = _J1939MultiPacketMessage(message)
                 conversations.append(mp_message)
 
             # Multipacket data transfer message recieved
-            if (pgn == 0xeb00):
+            if pgn == 0xeb00:
                 # Find the correct conversation
                 for i in range(0, len(conversations)):
                     # Found correct conversation
@@ -725,7 +675,7 @@ class TruckDevil:
                             conversations[i].completeMessage.dst_addr == dst_addr):
                         conversations[i].received_packets += 1
                         # Received all the packets
-                        if (conversations[i].complete()):
+                        if conversations[i].complete():
                             bytes_left = (
                                     conversations[i].num_bytes
                                     - conversations[i].received_bytes
@@ -748,7 +698,7 @@ class TruckDevil:
                         # UDS ISO-TP message received, first frame
             if (pgn == 0xda00 and
                     message.data[0:1] == '1'):
-                iso_tp_message = _J1939_ISO_TP_Message(message)
+                iso_tp_message = _J1939ISOTPMessage(message)
                 UDS_conversations.append(iso_tp_message)
 
             # UDS ISO-TP message recieved, consecutive frame
@@ -762,9 +712,9 @@ class TruckDevil:
                         # The index of this received message
                         indexByte = int(message.data[1:2], 16)
                         # Correct order of data received
-                        if (indexByte == UDS_conversations[i].nextExpectedIndex):
+                        if indexByte == UDS_conversations[i].nextExpectedIndex:
                             # Received all data bytes (including the current packet)
-                            if (UDS_conversations[i].complete(curr_received=7)):
+                            if UDS_conversations[i].complete(curr_received=7):
                                 bytes_left = (
                                         UDS_conversations[i].num_bytes -
                                         UDS_conversations[i].received_bytes
@@ -787,7 +737,7 @@ class TruckDevil:
                                     .data += data[2:16]
                                 # If indexByte is 15, we start back over
                                 # at 0 for next sequence number
-                                if (indexByte == 15):
+                                if indexByte == 15:
                                     UDS_conversations[i].nextExpectedIndex = 0
                                 else:
                                     UDS_conversations[i].nextExpectedIndex += 1
@@ -798,10 +748,10 @@ class TruckDevil:
                             # Add message to collectedMessages list
             collectedMessages.append(message)
             # If the message matches the one we're looking for
-            if ((dataContains == None or dataContains in message.data) and
-                    (target_src_addr == None or message.src_addr == target_src_addr) and
-                    (target_dst_addr == None or message.dst_addr == target_dst_addr) and
-                    (target_pgn == None or message.pgn == target_pgn)):
+            if ((data_contains is None or data_contains in message.data) and
+                    (target_src_addr is None or message.src_addr == target_src_addr) and
+                    (target_dst_addr is None or message.dst_addr == target_dst_addr) and
+                    (target_pgn is None or message.pgn == target_pgn)):
                 return message, collectedMessages
 
     def _sendMessageM2(self, message):
@@ -831,7 +781,7 @@ class TruckDevil:
 
         # Sending multipacket message - if number of bytes to send is
         # more than 8 (ex: 1CECFF000820120003FFCAFE00)
-        if (data_bytes > 8):
+        if data_bytes > 8:
             # EC is byte 2
             can_packet += 'EC'
             # Change int to 4 character hex string
@@ -845,7 +795,7 @@ class TruckDevil:
             # (multipacket messages are always 8 bytes each)
             can_packet += '08'
 
-            if (message.dst_addr == 0xFF):
+            if message.dst_addr == 0xFF:
                 # Send BAM message (ex: 20120003FFCAFE00)
                 control_message = ("20" + num_bytes[2:4] + num_bytes[0:2]
                                    + num_packets + "FF" + pgn[2:4] + pgn[0:2] + "00")
@@ -860,7 +810,7 @@ class TruckDevil:
             with self._lockM2:
                 # Send BAM or RTS message
                 self._m2.write(can_packet.encode('utf-8'))
-            if (message.dst_addr == 0xFF):
+            if message.dst_addr == 0xFF:
                 # Sleep 100ms before transmitting next message as
                 # stated in standard
                 time.sleep(0.1)
@@ -885,7 +835,7 @@ class TruckDevil:
 
             for i in range(0, int(num_packets, 16)):
                 # If a full 7 bytes is available
-                if ((i * 7) < data_bytes - data_bytes % 7):
+                if (i * 7) < data_bytes - data_bytes % 7:
                     seven_bytes = data[i * 14:(i * 14) + 14]
                 # Pad remaining last packet with FF for data
                 else:
@@ -908,7 +858,7 @@ class TruckDevil:
 
             # If a destination specific message, pdu_specific (byte 3)
             # will be destination address, otherwise it is the last half of pgn
-            if (message.dst_addr != 0xff):
+            if message.dst_addr != 0xff:
                 can_packet += dst_addr
             else:
                 can_packet += pgn[2:]
@@ -934,12 +884,12 @@ class TruckDevil:
         :param truckdevil_message: a J1939_Message to be sent on the BUS
         """
         data_bytes = truckdevil_message.total_bytes
-        if (data_bytes <= 8):
+        if data_bytes <= 8:
             can_id = ((truckdevil_message.priority * 4 << 24)
                       + (truckdevil_message.pgn << 8)
                       + truckdevil_message.src_addr
                       )
-            if (truckdevil_message.pgn < 0xF000):
+            if truckdevil_message.pgn < 0xF000:
                 can_id += truckdevil_message.dst_addr << 8
             data_array = bytes.fromhex(truckdevil_message.data)
             socketcan_message = can.Message(arbitration_id=can_id, data=data_array, is_extended_id=True)
@@ -953,7 +903,7 @@ class TruckDevil:
                       + (truckdevil_message.dst_addr << 8)
                       + truckdevil_message.src_addr
                       )
-            if (truckdevil_message.dst_addr == 0xFF):
+            if truckdevil_message.dst_addr == 0xFF:
                 # Send BAM message (ex: 20120003FFCAFE00)
                 control_message = bytes.fromhex("20" + num_bytes[2:4] + num_bytes[0:2]
                                                 + num_packets + "FF" + pgn[2:4] + pgn[0:2] + "00")
@@ -964,7 +914,7 @@ class TruckDevil:
             # send BAM or RTS message
             socketcan_message = can.Message(arbitration_id=can_id, data=control_message, is_extended_id=True)
             self._socketcan_bus.send(socketcan_message)
-            if (truckdevil_message.dst_addr == 0xFF):
+            if truckdevil_message.dst_addr == 0xFF:
                 # Sleep 100ms before transmitting next message as
                 # stated in standard
                 time.sleep(0.1)
@@ -981,7 +931,7 @@ class TruckDevil:
                       )
             for i in range(0, int(num_packets, 16)):
                 # If a full 7 bytes is available
-                if ((i * 7) < data_bytes - data_bytes % 7):
+                if (i * 7) < data_bytes - data_bytes % 7:
                     seven_bytes = truckdevil_message.data[i * 14:(i * 14) + 14]
                 # Pad remaining last packet with FF for data
                 else:
@@ -996,7 +946,7 @@ class TruckDevil:
                 time.sleep(0.01)
 
     def sendMessage(self, message):
-        if (self._m2used):
+        if self._m2used:
             self._sendMessageM2(message)
         else:
             self._sendMessageSocketCan(message)
@@ -1023,7 +973,7 @@ class TruckDevil:
             self._lockConversations.acquire()
             for i in range(0, len(self._conversations)):
                 # Found one ready to send - return it
-                if (self._conversations[i].readyToSend):
+                if self._conversations[i].readyToSend:
                     message = self._conversations[i].completeMessage
                     del self._conversations[i]
                     with self._lockCollectedMessages:
@@ -1038,7 +988,7 @@ class TruckDevil:
             self._lockUDSConversations.acquire()
             for i in range(0, len(self._UDSconversations)):
                 # Found one ready to send - return it
-                if (self._UDSconversations[i].readyToSend):
+                if self._UDSconversations[i].readyToSend:
                     message = self._UDSconversations[i].completeMessage
                     del self._UDSconversations[i]
                     with self._lockCollectedMessages:
@@ -1064,7 +1014,7 @@ class TruckDevil:
 
             # If pdu_format is 0-239 then pdu_specific is dst_addr,
             # otherwise it is group extension
-            if (pdu_format < 240):
+            if pdu_format < 240:
                 dst_addr = pdu_specific
                 # Add 00 to pgn if destination specific
                 # (ex: EC0B pgn becomes EC00 with dst_addr 0x0B)
@@ -1084,7 +1034,7 @@ class TruckDevil:
             # data is contained in bytes 6-13, in a hex string format
             data = can_packet[10:26]
 
-            message = J1939_Message(
+            message = J1939Message(
                 priority, pgn,
                 dst_addr, src_addr,
                 data, dlc
@@ -1094,16 +1044,16 @@ class TruckDevil:
             # broadcasted or peer-to-peer request to send
             if (pgn == 0xec00 and
                     (data[0:2] == "20" or data[0:2] == "10")):
-                mp_message = _J1939_MultiPacketMessage(message)
+                mp_message = _J1939MultiPacketMessage(message)
                 with self._lockConversations:
                     self._conversations.append(mp_message)
                 # Break here if TPM messages are abstracted and
                 # don't add this message to collectedMessages
-                if (abstractTPM == True):
+                if abstractTPM == True:
                     continue
 
             # Multipacket data transfer message recieved
-            if (pgn == 0xeb00):
+            if pgn == 0xeb00:
                 # Find the correct conversation
                 self._lockConversations.acquire()
                 for i in range(0, len(self._conversations)):
@@ -1112,7 +1062,7 @@ class TruckDevil:
                             self._conversations[i].completeMessage.dst_addr == dst_addr):
                         self._conversations[i].received_packets += 1
                         # Received all the packets
-                        if (self._conversations[i].complete()):
+                        if self._conversations[i].complete():
                             bytes_left = (self._conversations[i].num_bytes
                                           - self._conversations[i].received_bytes)
                             self._conversations[i] \
@@ -1134,18 +1084,18 @@ class TruckDevil:
                 self._lockConversations.release()
                 # Break here if TPM messages are abstracted,
                 # and don't add this message to collectedMessages
-                if (abstractTPM == True):
+                if abstractTPM == True:
                     continue
 
             # UDS ISO-TP message received, first frame
             if (pgn == 0xda00 and
                     message.data[0:1] == '1'):
-                iso_tp_message = _J1939_ISO_TP_Message(message)
+                iso_tp_message = _J1939ISOTPMessage(message)
                 with self._lockUDSConversations:
                     self._UDSconversations.append(iso_tp_message)
                 # Break here if TPM messages are abstracted,
                 # and don't add this message to collectedMessages
-                if (abstractTPM == True):
+                if abstractTPM == True:
                     continue
             # UDS ISO-TP message recieved, consecutive frame
             elif (pgn == 0xda00 and
@@ -1188,7 +1138,7 @@ class TruckDevil:
                                     .data += data[2:16]
                                 # If indexByte is 15, we start back over
                                 # at 0 for next sequence number
-                                if (indexByte == 15):
+                                if indexByte == 15:
                                     self._UDSconversations[i] \
                                         .nextExpectedIndex = 0
                                 else:
@@ -1201,67 +1151,18 @@ class TruckDevil:
                 self._lockUDSConversations.release()
                 # Break here if TPM messages are abstracted,
                 # and don't add this message to collectedMessages
-                if (abstractTPM == True):
+                if abstractTPM == True:
                     continue
             # UDS ISO-TP message recieved, flow control frame
             elif (pgn == 0xda00 and
                   message.data[0:1] == '3'):
                 # Break here if TPM messages are abstracted,
                 # and don't add this message to collectedMessages
-                if (abstractTPM == True):
+                if abstractTPM == True:
                     continue
             with self._lockCollectedMessages:
                 # Add message to collectedMessages list
                 self._collectedMessages.append(message)
-    def _readOneMessage(self):
-        """
-        Reads one message from M2 or other device and returns it
-        For internal function use.
-        returned hex string format ex: 18EF0B00080102030405060708
-        """
-        if self._m2used:
-            response = ""
-            startReading = False
-            while True:
-                with self._lockM2:
-                    # Receive next character from M2
-                    if self._m2.inWaiting() > 0:
-                        # TODO: change back
-                        temp = self._m2.read()
-                        try:
-                            char = temp.decode("utf-8")
-                        except:
-                            print(temp)
-                            continue
-                        # char = self._m2.read().decode("utf-8")
-                    else:
-                        time.sleep(0.01)
-                        continue
-                # Denotes start of CAN message
-                if startReading == False and char == '$':
-                    response = '$'
-                    startReading = True
-                # Reading contents of CAN message, appending to response
-                elif startReading == True and char != '*':
-                    response += char
-                # Denotes end of CAN message - return response
-                elif (startReading == True and len(response) > 0 and
-                      response[0] == '$' and char == '*' and
-                      response.count("$") == 1):
-                    return response[1:]
-                # If the serial buffer gets flushed during reading
-                elif response.count("$") > 1:
-                    response = ""
-                    startReading = False
-        else:
-            msg = None
-            while msg is None:
-                msg = self._socketcan_bus.recv(0.01)
-            data_string = ''.join(format(x, '02x') for x in msg.data)
-            can_id = hex(msg.arbitration_id)[2:].zfill(8)
-            dlc = hex(msg.dlc)[2:].zfill(2)
-            response = can_id + dlc + data_string
-            return response
 
     def _UDSDecode(self, message):
         """
@@ -1272,13 +1173,13 @@ class TruckDevil:
         # Frame type is first nibble
         frame_type = message.data[0:1]
         # 0 is single frame
-        if (frame_type == '0'):
+        if frame_type == '0':
             # Size is between 0 and 7 bytes
             size = int(message.data[1:2], 16)
-            serviceID = message.data[2:4].upper()
+            service_id = message.data[2:4].upper()
             uds_data = message.data[4:2 + (size * 2)].upper()
         # 1 is first frame - don't decode data
-        elif (frame_type == '1'):
+        elif frame_type == '1':
             # Size is between 8 and 4095 bytes
             size = int(message.data[1:4], 16)
             decoded += (
@@ -1289,71 +1190,71 @@ class TruckDevil:
             )
             return decoded
         # 2 is consecutive frame
-        elif (frame_type == '2'):
+        elif frame_type == '2':
             # Index is between 0 and 15
-            dataIndex = int(message.data[1:2], 16)
+            data_index = int(message.data[1:2], 16)
             decoded += (
                     '      Type: Consecutive frame, indicating this is index ' +
-                    str(dataIndex) +
+                    str(data_index) +
                     '\n'
             )
             return decoded
         # 3 is flow control frame - don't decode data
-        elif (frame_type == '3'):
+        elif frame_type == '3':
             # 0 (continue), 1 (wait), 2 (overflow/abort)
-            FCFlag = int(message.data[1:2], 16)
-            FCFlag_code = ''
-            if (FCFlag == 0):
-                FCFlag_code = 'continue to send'
-            elif (FCFlag == 1):
-                FCFlag_code = 'wait'
-            elif (FCFlag == 2):
-                FCFlag_code = 'overflow/abort'
+            fc_flag = int(message.data[1:2], 16)
+            fc_flag_code = ''
+            if fc_flag == 0:
+                fc_flag_code = 'continue to send'
+            elif fc_flag == 1:
+                fc_flag_code = 'wait'
+            elif fc_flag == 2:
+                fc_flag_code = 'overflow/abort'
             else:
-                FCFlag_code = 'unknown error'
+                fc_flag_code = 'unknown error'
             # 0: remaining frames sent without flow control or delay,
             # >0: send number of frames before waiting for the next
             # flow control frame
-            blockSize = int(message.data[2:4], 16)
-            blockSize_code = ''
-            if (blockSize == 0):
-                blockSize_code = 'remaining frames to be sent without flow control or delay'
+            block_size = int(message.data[2:4], 16)
+            block_size_code = ''
+            if block_size == 0:
+                block_size_code = 'remaining frames to be sent without flow control or delay'
             else:
-                blockSize_code = 'send number of frames before waiting for the next flow control frame'
+                block_size_code = 'send number of frames before waiting for the next flow control frame'
             # <=127 (separation time in m),
             # 241-249 (100-900 microseconds)
-            separationTime = int(message.data[4:6], 16)
-            separationTime_code = ''
-            if (separationTime <= 127):
-                separationTime_code = 'milliseconds'
-            elif (separationTime >= 241 and separationTime <= 249):
-                separationTime = int(hex(separationTime)[3:4], 16) * 100
-                separationTime_code = 'microseconds'
+            separation_time = int(message.data[4:6], 16)
+            separation_time_code = ''
+            if separation_time <= 127:
+                separation_time_code = 'milliseconds'
+            elif 241 <= separation_time <= 249:
+                separation_time = int(hex(separation_time)[3:4], 16) * 100
+                separation_time_code = 'microseconds'
             else:
-                separationTime_code = 'unknown error'
+                separation_time_code = 'unknown error'
             decoded += '      Type: Flow control frame, with the following characteristics:\n'
             decoded += (
                     '          FC Flag: ' +
-                    str(FCFlag) + ' - ' +
-                    FCFlag_code + '\n'
+                    str(fc_flag) + ' - ' +
+                    fc_flag_code + '\n'
             )
             decoded += (
                     '          Block size: ' +
-                    str(blockSize) + ' - ' +
-                    blockSize_code + '\n'
+                    str(block_size) + ' - ' +
+                    block_size_code + '\n'
             )
             decoded += (
                     '          Separation Time: ' +
-                    str(separationTime) + ' - ' +
-                    separationTime_code + '\n'
+                    str(separation_time) + ' - ' +
+                    separation_time_code + '\n'
             )
             return decoded
-        # Frame put back together by TruckDevil
+        # Frame put back together by truckdevil
         else:
             size = int((len(message.data) - 2) / 2)
-            serviceID = message.data[2:4].upper()
+            service_id = message.data[2:4].upper()
             uds_data = message.data[4:].upper()
-        if (int(serviceID, 16) == 0x7F):
+        if int(service_id, 16) == 0x7F:
             decoded += '      UDS service: Negative Response Code\n'
             decoded += (
                     '        *request service ID: 0x' +
@@ -1371,63 +1272,63 @@ class TruckDevil:
             )
             return decoded
         try:
-            service = copy.deepcopy(self._UDS_services_list[serviceID])
+            service = copy.deepcopy(self._UDS_services_list[service_id])
         except KeyError:
-            return decoded + '      UDS Service ID ' + str(serviceID) + ' does not exist\n'
+            return decoded + '      UDS Service ID ' + str(service_id) + ' does not exist\n'
 
         decoded += '      PGNDataLength: ' + str(size + 1) + '\n'
         decoded += '      UDS service: ' + service['service']
-        if (service['type'] == 'request' or service['type'] == 'response'):
+        if service['type'] == 'request' or service['type'] == 'response':
             decoded += ' - ' + service['type'] + '\n'
             data_bytes = service['data_bytes']
         elif (service['type'] == 'multiRequest' or
               service['type'] == 'multiResponse'):
-            if (service['type'] == 'multiRequest'):
+            if service['type'] == 'multiRequest':
                 decoded += ' - ' + 'request' + '\n'
             else:
                 decoded += ' - ' + 'response' + '\n'
             controller_byte = str(int(uds_data[0:2], 16))
-            if (controller_byte in service['parameters'].keys()):
+            if controller_byte in service['parameters'].keys():
                 data_bytes = service['parameters'][controller_byte]['data_bytes']
-            elif ('others' in service['parameters'].keys()):
+            elif 'others' in service['parameters'].keys():
                 data_bytes = service['parameters']['others']['data_bytes']
             else:
                 return decoded
         subfunction = None
-        if (service['subfunction_supported'] == True):
-            suppressPos = int(bin(int(uds_data[0:2], 16))[2:].zfill(8)[0:1], 2)
+        if service['subfunction_supported']:
+            suppress_pos = int(bin(int(uds_data[0:2], 16))[2:].zfill(8)[0:1], 2)
             subfunction = int(bin(int(uds_data[0:2], 16))[2:].zfill(8)[1:], 2)
             decoded += (
                     '      suppress positive response? : ' +
-                    str(bool(suppressPos)) + '\n'
+                    str(bool(suppress_pos)) + '\n'
             )
         data_index = 0
-        tempLengthOfMemoryAddress = -1
-        tempLengthOfMemorySize = -1
-        tempScalingByteDataType = -1
-        tempLengthScalingByte = -1
-        tempRoutineIdentifier = -1
-        tempLengthFilePathAndName = -1
-        tempModeOfOperation = -1
-        tempLengthFileSizeParameter = -1
-        tempLengthMaxNumberOfBlockLength = -1
-        tempLengthEventTypeRecord = -1
+        temp_length_of_memory_address = -1
+        temp_length_of_memory_size = -1
+        temp_scaling_byte_data_type = -1
+        temp_length_scaling_byte = -1
+        temp_routine_identifier = -1
+        temp_length_file_path_and_name = -1
+        temp_mode_of_operation = -1
+        temp_length_file_size_parameter = -1
+        temp_length_max_number_of_block_length = -1
+        temp_length_event_type_record = -1
         for func_name in data_bytes:
-            if (data_index >= len(uds_data) / 2):
+            if data_index >= len(uds_data) / 2:
                 break
-            if ("*" in func_name):
+            if "*" in func_name:
                 data_bytes.append(func_name)
                 func_name = func_name.replace("*", "")
 
             # Odd functions that need special care
             if (func_name == 'dataFormatIdentifier2' and
-                    (tempModeOfOperation == 'deleteFile'
-                     or tempModeOfOperation == 'readDir')):
+                    (temp_mode_of_operation == 'deleteFile'
+                     or temp_mode_of_operation == 'readDir')):
                 continue
             elif (func_name == 'fileSizeParameterLength' and
-                  (tempModeOfOperation == 'deleteFile'
-                   or tempModeOfOperation == 'readFile'
-                   or tempModeOfOperation == 'readDir')):
+                  (temp_mode_of_operation == 'deleteFile'
+                   or temp_mode_of_operation == 'readFile'
+                   or temp_mode_of_operation == 'readDir')):
                 continue
 
             decoded += '        *' + func_name + '\n'
@@ -1438,7 +1339,7 @@ class TruckDevil:
             )
             if (function['type'] == 'bit' and
                     function['numBytes'] != 'variable'):
-                if (subfunction != None and
+                if (subfunction is not None and
                         data_bytes.index(func_name) == 0):
                     val = function['parameters'][str(subfunction)]
                 else:
@@ -1449,8 +1350,8 @@ class TruckDevil:
                     except KeyError:
                         val = 'cannot decode value (out of range)'
                 decoded += '            value: ' + val + '\n'
-                if (func_name == 'modeOfOperation'):
-                    tempModeOfOperation = val
+                if func_name == 'modeOfOperation':
+                    temp_mode_of_operation = val
                 data_index += function['numBytes']
             elif (function['type'] == 'list' and
                   function['numBytes'] != 'variable'):
@@ -1469,7 +1370,7 @@ class TruckDevil:
                             function['parameters'][param]['description'] +
                             '\n'
                     )
-                    if (function['parameters'][param]['units'] == 'list'):
+                    if function['parameters'][param]['units'] == 'list':
                         for nestedParam in function['parameters'][param]['parameters']:
                             decoded += (
                                     '              *' +
@@ -1481,18 +1382,18 @@ class TruckDevil:
                                     function['parameters'][param]['parameters'][nestedParam]['description'] +
                                     '\n'
                             )
-                            startPosition = function['parameters'][param]['startPosition']
-                            startNestedPosition = (
-                                    startPosition +
+                            start_position = function['parameters'][param]['startPosition']
+                            start_nested_position = (
+                                    start_position +
                                     function['parameters'][param]['parameters'][nestedParam]['startPosition']
                             )
-                            totalLen = function['parameters'][param]['parameters'][nestedParam]['totalLen']
-                            inner_func_data = bin_data[startNestedPosition: startNestedPosition + totalLen]
+                            total_len = function['parameters'][param]['parameters'][nestedParam]['totalLen']
+                            inner_func_data = bin_data[start_nested_position: start_nested_position + total_len]
                             val = (
                                 str(int(inner_func_data, 2)
                                     * int(function['parameters'][param]['parameters'][nestedParam]['resolution']))
                             )
-                            if (function['parameters'][param]['parameters'][nestedParam]['units'] == 'bit'):
+                            if function['parameters'][param]['parameters'][nestedParam]['units'] == 'bit':
                                 decoded += (
                                         '                value: ' +
                                         function['parameters'][param]['parameters'][nestedParam]['bitDecoding'][val] +
@@ -1506,42 +1407,42 @@ class TruckDevil:
                                         '\n'
                                 )
                     else:
-                        startPosition = function['parameters'][param]['startPosition']
-                        totalLen = function['parameters'][param]['totalLen']
-                        inner_func_data = bin_data[startPosition:startPosition + totalLen]
+                        start_position = function['parameters'][param]['startPosition']
+                        total_len = function['parameters'][param]['totalLen']
+                        inner_func_data = bin_data[start_position:start_position + total_len]
                         val = (
                             str(int(inner_func_data, 2)
                                 * int(function['parameters'][param]['resolution']))
                         )
 
-                        if (function['parameters'][param]['name'] == 'dataType'):
-                            tempScalingByteDataType = int(val)
-                        elif (function['parameters'][param]['name'] == "LengthOfMemoryAddress"):
-                            tempLengthOfMemoryAddress = int(inner_func_data, 2)
-                        elif (function['parameters'][param]['name'] == "LengthOfMemorySize"):
-                            tempLengthOfMemorySize = int(inner_func_data, 2)
-                        elif (function['parameters'][param]['name'] == "numBytes"):
-                            tempLengthScalingByte = int(val)
-                        elif (function['parameters'][param]['name'] == "lengthMaxNumberOfBlockLength"):
-                            tempLengthMaxNumberOfBlockLength = int(val)
-                        elif (function['parameters'][param]['name'] == "eventType"):
-                            eventType = int(val)
-                            if (eventType == 1 or eventType == 2):
-                                tempLengthEventTypeRecord = 1
-                            elif (eventType == 3):
-                                tempLengthEventTypeRecord = 2
-                            elif (eventType == 7):
-                                tempLengthEventTypeRecord = 10
+                        if function['parameters'][param]['name'] == 'dataType':
+                            temp_scaling_byte_data_type = int(val)
+                        elif function['parameters'][param]['name'] == "LengthOfMemoryAddress":
+                            temp_length_of_memory_address = int(inner_func_data, 2)
+                        elif function['parameters'][param]['name'] == "LengthOfMemorySize":
+                            temp_length_of_memory_size = int(inner_func_data, 2)
+                        elif function['parameters'][param]['name'] == "numBytes":
+                            temp_length_scaling_byte = int(val)
+                        elif function['parameters'][param]['name'] == "lengthMaxNumberOfBlockLength":
+                            temp_length_max_number_of_block_length = int(val)
+                        elif function['parameters'][param]['name'] == "eventType":
+                            event_type = int(val)
+                            if event_type == 1 or event_type == 2:
+                                temp_length_event_type_record = 1
+                            elif event_type == 3:
+                                temp_length_event_type_record = 2
+                            elif event_type == 7:
+                                temp_length_event_type_record = 10
                             else:
-                                tempLengthEventTypeRecord = 0
+                                temp_length_event_type_record = 0
 
-                        if (function['parameters'][param]['units'] == 'bit'):
+                        if function['parameters'][param]['units'] == 'bit':
                             decoded += (
                                     '              value: ' +
                                     function['parameters'][param]['bitDecoding'][val] +
                                     '\n'
                             )
-                        elif (function['parameters'][param]['units'] == 'hexValue'):
+                        elif function['parameters'][param]['units'] == 'hexValue':
                             decoded += (
                                     '              value: 0x' +
                                     hex(int(val))[2:].upper() +
@@ -1558,8 +1459,7 @@ class TruckDevil:
             elif (function['type'] == 'value' and
                   function['numBytes'] != 'variable'):
                 func_data = (
-                    uds_data[data_index * 2:function['numBytes'] * 2
-                                            + data_index * 2]
+                    uds_data[data_index * 2:function['numBytes'] * 2 + data_index * 2]
                 )
                 val = int(func_data, 16) * function['resolution']
                 decoded += (
@@ -1568,10 +1468,10 @@ class TruckDevil:
                         function['units'] +
                         '\n'
                 )
-                if (func_name == 'filePathAndNameLength'):
-                    tempLengthFilePathAndName = val
-                if (func_name == 'fileSizeParameterLength'):
-                    tempLengthFileSizeParameter = val
+                if func_name == 'filePathAndNameLength':
+                    temp_length_file_path_and_name = val
+                if func_name == 'fileSizeParameterLength':
+                    temp_length_file_size_parameter = val
                 data_index += function['numBytes']
             elif (function['type'] == 'hexValue' and
                   function['numBytes'] != 'variable'):
@@ -1579,14 +1479,14 @@ class TruckDevil:
                     uds_data[data_index * 2:function['numBytes'] * 2
                                             + data_index * 2]
                 )
-                if (func_name == 'periodicDataIdentifier'):
+                if func_name == 'periodicDataIdentifier':
                     decoded += '            value: 0xF2' + func_data + '\n'
                 else:
                     decoded += '            value: 0x' + func_data + '\n'
                 data_index += function['numBytes']
             elif (function['type'] == 'largeBit' and
                   function['numBytes'] != 'variable'):
-                if (func_name == 'routineInfo'):
+                if func_name == 'routineInfo':
                     decoded += '            optional value - not used' + '\n'
                     continue
                 func_data = (
@@ -1596,30 +1496,30 @@ class TruckDevil:
                 val = str(int(func_data, 16))
                 for param in function['parameters']:
                     range_nums = param.split('-')
-                    if (len(range_nums) == 1):
-                        if (val == range_nums[0]):
+                    if len(range_nums) == 1:
+                        if val == range_nums[0]:
                             # Found it
                             param_name = function['parameters'][param]
                     else:
-                        if (val >= range_nums[0] and val <= range_nums[1]):
+                        if range_nums[0] <= val <= range_nums[1]:
                             param_name = function['parameters'][param]
                 decoded += (
                         '            value: ' + val +
                         ' - ' + param_name + '\n'
                 )
-                if (func_name == 'routineIdentifier'):
-                    tempRoutineIdentifier = param_name
+                if func_name == 'routineIdentifier':
+                    temp_routine_identifier = param_name
                 data_index += function['numBytes']
             elif (function['type'] == 'optional' and
                   function['numBytes'] == 'variable'):
                 if (func_name == 'scalingByteExtension' and
-                        tempScalingByteDataType in function['dependentOnValues']):
+                        temp_scaling_byte_data_type in function['dependentOnValues']):
                     func_data = (
-                        uds_data[data_index * 2:tempLengthScalingByte * 2
+                        uds_data[data_index * 2:temp_length_scaling_byte * 2
                                                 + data_index * 2]
                     )
                     decoded += '            value: 0x' + func_data + '\n'
-                    data_index += tempLengthScalingByte
+                    data_index += temp_length_scaling_byte
                 else:
                     decoded += '            optional value - not used' + '\n'
                     continue
@@ -1627,11 +1527,10 @@ class TruckDevil:
                   function['numBytes'] == 'variable'):
                 if func_name == 'memoryAddress':
                     func_data = (
-                        uds_data[data_index * 2:tempLengthOfMemoryAddress * 2
-                                                + data_index * 2]
+                        uds_data[data_index * 2:temp_length_of_memory_address * 2 + data_index * 2]
                     )
                     decoded += '            value: 0x' + func_data + '\n'
-                    data_index += tempLengthOfMemoryAddress
+                    data_index += temp_length_of_memory_address
                 elif (func_name == 'memorySize' and
                       service['service'] == 'DynamicallyDefineDataIdentifier' and
                       subfunction == 1):
@@ -1644,15 +1543,14 @@ class TruckDevil:
                     data_index += 1
                 elif func_name == 'memorySize':
                     func_data = (
-                        uds_data[data_index * 2:tempLengthOfMemorySize * 2
-                                                + data_index * 2]
+                        uds_data[data_index * 2:temp_length_of_memory_size * 2 + data_index * 2]
                     )
                     decoded += (
                             '            value: ' +
                             str(int(func_data, 16)) +
                             ' bytes\n'
                     )
-                    data_index += tempLengthOfMemorySize
+                    data_index += temp_length_of_memory_size
                 elif (func_name == 'securitySeed' or
                       func_name == 'securityAccessDataOrKey' or
                       func_name == 'routineStatusRecord' or
@@ -1669,7 +1567,7 @@ class TruckDevil:
                     data_index = len(uds_data) / 2 + 1
                 elif func_name == 'filePathAndName':
                     func_data = (
-                        uds_data[data_index * 2:tempLengthFilePathAndName * 2
+                        uds_data[data_index * 2:temp_length_file_path_and_name * 2
                                                 + data_index * 2]
                     )
                     bytes_object = bytes.fromhex(func_data)
@@ -1678,11 +1576,11 @@ class TruckDevil:
                             bytes_object.decode("ASCII") +
                             '\n'
                     )
-                    data_index += tempLengthFilePathAndName
+                    data_index += temp_length_file_path_and_name
                 elif (func_name == 'fileSizeUncompressed' or
                       func_name == 'fileSizeCompressed'):
                     func_data = (
-                        uds_data[data_index * 2:tempLengthFileSizeParameter * 2
+                        uds_data[data_index * 2:temp_length_file_size_parameter * 2
                                                 + data_index * 2]
                     )
                     decoded += (
@@ -1690,10 +1588,10 @@ class TruckDevil:
                             str(int(int(func_data, 16) / 1000)) +
                             ' Kbyte\n'
                     )
-                    data_index += tempLengthFileSizeParameter
+                    data_index += temp_length_file_size_parameter
                 elif func_name == 'maxNumberOfBlockLength':
                     func_data = (
-                        uds_data[data_index * 2:tempLengthMaxNumberOfBlockLength * 2
+                        uds_data[data_index * 2:temp_length_max_number_of_block_length * 2
                                                 + data_index * 2]
                     )
                     decoded += (
@@ -1701,84 +1599,101 @@ class TruckDevil:
                             str(int(int(func_data, 16))) +
                             ' bytes\n'
                     )
-                    data_index += tempLengthMaxNumberOfBlockLength
+                    data_index += temp_length_max_number_of_block_length
                 elif func_name == 'eventTypeRecord':
                     func_data = (
-                        uds_data[data_index * 2:tempLengthEventTypeRecord * 2
+                        uds_data[data_index * 2:temp_length_event_type_record * 2
                                                 + data_index * 2]
                     )
                     decoded += '            value: 0x' + func_data + '\n'
-                    data_index += tempLengthEventTypeRecord
+                    data_index += temp_length_event_type_record
                 else:
                     decoded += '            length is variable' + '\n'
                     data_index = len(uds_data) / 2 + 1
         return decoded
 
 
-class J1939_Message:
-    """
-    Data object for storing the contents of a single J1939 message
+class J1939Message:
+    def __init__(self, can_id: int, data: str, total_bytes=None):
+        """
 
-    :param priority:       0x00-0x07 (Default value = 0x00)
-    :param pgn:            0x0000-0xFFFF (Default value = 0x0000)
-    :param dst_addr:       0x00-0xFF, 0xFF is for broadcast (Default value = 0xFF)
-    :param src_addr:       0x00-0xFF (Default value = 0x00)
-    :param total_bytes:    >= 0
-    :param data:           hex string, eg: "0102030405060708" (Default value = "0000000000000000")
-    """
-
-    def __init__(self, priority=0x00,
-                 pgn=0x0000, dst_addr=0xFF,
-                 src_addr=0x00, data="0000000000000000",
-                 total_bytes=None):
-        if (total_bytes == None):
-            total_bytes = len(data) / 2
-        # Make sure the given values are acceptable
-        if (priority < 0x00 or
-                priority > 0x07):
-            raise ValueError('Priority given is outside of acceptable value')
-        if (pgn < 0x00 or
-                pgn > 0xffff):
-            raise ValueError('PGN given is outside of acceptable value')
-        if (dst_addr < 0x00 or
-                dst_addr > 0xff):
-            raise ValueError('Destination Address given is outside of acceptable value')
-        if (src_addr < 0x00 or
-                src_addr > 0xff):
-            raise ValueError('Source Address given is outside of acceptable value')
-        if (total_bytes < 0x00):
-            raise ValueError('DLC given is outside of acceptable value')
+        """
+        if can_id < 0 or can_id > 0x1FFFFFFF:
+            raise ValueError("invalid CAN ID")
         try:
-            if (len(data) > 0):
+            if len(data) > 0:
                 int(data, 16)
         except ValueError:
             raise ValueError('Data must be in hexadecimal format')
         if (len(data) % 2 != 0 or
                 len(data) > 3570):
             raise ValueError('Length of data must be an even number and shorter than 1785 bytes')
+        if total_bytes is None:
+            total_bytes = len(data) / 2
+        self._can_id = can_id
+        self._data = data
+        self._total_bytes = int(total_bytes)
 
-        # pgn is only 2 hex digits
-        if (pgn <= 0xFF):
-            pgn = 0
-            # pgn is only 3 hex digits
-        elif (pgn > 0xFF and
-              pgn <= 0xFFF):
-            # Only use the first nibble
-            pgn = int(hex(pgn)[2:3] + '00', 16)
-            # If in the destination specific range
-        elif (pgn > 0xFFF and
-              pgn < 0xF000):
-            # Only use the first byte
-            pgn = int(hex(pgn)[2:4] + '00', 16)
-        elif (pgn >= 0xF000):
-            dst_addr = 0xff
+    @property
+    def can_id(self):
+        return self._can_id
 
-        self.priority = priority
-        self.pgn = pgn
-        self.dst_addr = dst_addr
-        self.src_addr = src_addr
-        self.total_bytes = int(total_bytes)
-        self.data = data
+    @can_id.setter
+    def can_id(self, value):
+        if value < 0 or value > 0x1FFFFFFF:
+            raise ValueError("invalid CAN ID")
+        self._can_id = value
+
+    @property
+    def priority(self):
+        return self._can_id >> 26
+
+    @property
+    def reserved_bit(self):
+        return self._can_id >> 25 & 1
+
+    @property
+    def data_page_bit(self):
+        return self._can_id >> 24 & 1
+
+    @property
+    def pgn(self):
+        return self._can_id >> 8 & 0xFFFF
+
+    @property
+    def dst_addr(self):
+        if self.pgn >= 0xF000:
+            return 0xFF
+        else:
+            return self._can_id >> 8 & 0xFF
+
+    @property
+    def src_addr(self):
+        return self._can_id & 0xFF
+
+    @property
+    def data(self):
+        return self._data
+
+    @data.setter
+    def data(self, value: str):
+        try:
+            if len(value) > 0:
+                int(value, 16)
+        except ValueError:
+            raise ValueError('Data must be in hexadecimal format')
+        if (len(value) % 2 != 0 or
+                len(value) > 3570):
+            raise ValueError('Length of data must be an even number and shorter than 1785 bytes')
+        self._data = value
+
+    @property
+    def total_bytes(self):
+        return self._total_bytes
+
+    @total_bytes.setter
+    def total_bytes(self, value):
+        self._total_bytes = value
 
     def __str__(self):
         """
@@ -1790,7 +1705,7 @@ class J1939_Message:
                                                        self.total_bytes, self.data.upper())
 
 
-class _J1939_MultiPacketMessage:
+class _J1939MultiPacketMessage:
     """
     Creates a new multipacket message - for internal use only to deal with Transport Protocol
 
@@ -1798,8 +1713,7 @@ class _J1939_MultiPacketMessage:
     """
 
     def __init__(self, first_message=None):
-        if (isinstance(first_message, J1939_Message) == False or
-                first_message == None):
+        if isinstance(first_message, J1939Message) is False or first_message is None:
             raise Exception('Must include an instance of a J1939_Message')
 
         self.num_bytes = int(first_message.data[4:6] + first_message.data[2:4], 16)
@@ -1808,7 +1722,7 @@ class _J1939_MultiPacketMessage:
         self.received_bytes = 0
 
         priority = first_message.priority
-        if (int(first_message.data[12:14], 16) < 240):
+        if int(first_message.data[12:14], 16) < 240:
             pgn = int(first_message.data[12:14] + "00", 16)
         else:
             pgn = int(first_message.data[12:14] + first_message.data[10:12], 16)
@@ -1818,7 +1732,7 @@ class _J1939_MultiPacketMessage:
         data = ""
 
         # Create new message with TP abstracted
-        self.completeMessage = J1939_Message(
+        self.completeMessage = J1939Message(
             priority, pgn,
             dst_addr, src_addr,
             data, total_bytes
@@ -1829,13 +1743,13 @@ class _J1939_MultiPacketMessage:
 
     def complete(self):
         # If all expected packets have been added to multipacket message
-        if (self.received_packets == self.num_packets):
+        if self.received_packets == self.num_packets:
             return True
         else:
             return False
 
 
-class _J1939_ISO_TP_Message:
+class _J1939ISOTPMessage:
     """
     Creates a new ISO-TP (ISO 15765-2) message - for internal use only to deal with long UDS messages
 
@@ -1843,8 +1757,8 @@ class _J1939_ISO_TP_Message:
     """
 
     def __init__(self, first_message=None):
-        if (isinstance(first_message, J1939_Message) == False or
-                first_message == None):
+        if (isinstance(first_message, J1939Message) == False or
+                first_message is None):
             raise Exception('Must include an instance of a J1939_Message')
 
         # Between 8 and 4095 bytes
@@ -1854,7 +1768,7 @@ class _J1939_ISO_TP_Message:
         pgn = 0xDA00
         dst_addr = first_message.dst_addr
         src_addr = first_message.src_addr
-        # Add 40 for TruckDevil decoder to know this is a created ISO-TP
+        # Add 40 for truckdevil decoder to know this is a created ISO-TP
         # message, not a properly formatted one
         data = '40' + first_message.data[4:]
 
@@ -1863,7 +1777,7 @@ class _J1939_ISO_TP_Message:
         self.nextExpectedIndex = 1
 
         # Create new message
-        self.completeMessage = J1939_Message(
+        self.completeMessage = J1939Message(
             priority, pgn,
             dst_addr, src_addr,
             data
@@ -1874,7 +1788,7 @@ class _J1939_ISO_TP_Message:
 
     def complete(self, curr_received=0):
         # If all expected data has been received
-        if (self.received_bytes + curr_received >= self.num_bytes):
+        if self.received_bytes + curr_received >= self.num_bytes:
             return True
         else:
             return False

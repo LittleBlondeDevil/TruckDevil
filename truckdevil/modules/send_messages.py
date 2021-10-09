@@ -1,5 +1,5 @@
 import argparse
-import truckDevil as td
+from j1939.j1939 import J1939Interface, J1939Message
 
 
 def get_vals_from_args(args):
@@ -25,7 +25,7 @@ def get_vals_from_args(args):
     return pgn, priority, src_addr, dst_addr
 
 
-def main_mod(devil):
+def main_mod(devil, argv):
     print("\n***** Send Message *****")
     print("Send message to CAN device to get pushed to the BUS.")
     ap = argparse.ArgumentParser(usage="pgn data [-h] [-p PRIORITY] [-a SRC_ADDR] [-d DST_ADDR] [-v]")
@@ -46,7 +46,7 @@ def main_mod(devil):
         try:
             args = vars(ap.parse_args(arg_input.split()))
             pgn, priority, src_addr, dst_addr = get_vals_from_args(args)
-            message = td.J1939_Message(priority, pgn, dst_addr, src_addr, args['data'])
+            message = J1939Message(priority, pgn, dst_addr, src_addr, args['data'])
         except (SystemExit, ValueError) as e:
             print(e)
             continue
@@ -54,7 +54,7 @@ def main_mod(devil):
         if args['verbose'] is not None and args['verbose'] == 1:
             print(str(message))
         elif args['verbose'] is not None and args['verbose'] >= 2:
-            print(devil.getDecodedMessage(message))
+            print(devil.get_decoded_message(message))
 
 
 def main():
@@ -80,15 +80,15 @@ def main():
     args = vars(ap.parse_args())
     pgn, priority, src_addr, dst_addr = get_vals_from_args(args)
 
-    devil = td.TruckDevil(args['device_type'], args['port'], args['can_channel'], args['can_baud'])
+    devil = J1939Interface(args['device_type'], args['port'], args['can_channel'], args['can_baud'])
 
-    message = td.J1939_Message(priority, pgn, dst_addr, src_addr, args['data'])
+    message = J1939Message(priority, pgn, dst_addr, src_addr, args['data'])
     devil.sendMessage(message)
 
     if args['verbose'] is not None and args['verbose'] == 1:
         print(str(message))
     elif args['verbose'] is not None and args['verbose'] >= 2:
-        print(devil.getDecodedMessage(message))
+        print(devil.get_decoded_message(message))
 
 
 if __name__ == "__main__":

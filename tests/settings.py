@@ -1,7 +1,7 @@
 import unittest
 
-from TruckDevil.settings import Setting
-from TruckDevil.settings import SettingsManager
+from TruckDevil.truckdevil.libs.settings import Setting
+from TruckDevil.truckdevil.libs.settings import SettingsManager
 
 
 class SettingsManagerTestCase(unittest.TestCase):
@@ -18,7 +18,6 @@ class SettingsManagerTestCase(unittest.TestCase):
         self.assertTrue(sm['example'].updated)
 
         self.assertTrue(isinstance(sm['example'], Setting))
-
 
 
 class SettingsTestCase(unittest.TestCase):
@@ -64,9 +63,6 @@ class SettingsTestCase(unittest.TestCase):
             setting.value = 11
 
         self.assertTrue("constraint minval" in str(context.exception))
-
-
-
 
 
 if __name__ == '__main__':

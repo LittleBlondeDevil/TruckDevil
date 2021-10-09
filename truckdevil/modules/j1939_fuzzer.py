@@ -1,16 +1,13 @@
-import argparse
 import cmd
 import time
 import random
-import threading, queue
-import multiprocessing
-from ctypes import c_bool
+import threading
 import copy
 import sys
 
-import truckDevil as td
+from j1939.j1939 import J1939Message
 
-from TruckDevil.settings import SettingsManager, Setting
+from libs.settings import SettingsManager, Setting
 
 
 class J1939Fuzzer:
@@ -345,7 +342,7 @@ class J1939Fuzzer:
                             used_bits += len(filler)
                     bits_left = (data_len * 8 - used_bits) * '1'
                     if len(bits_left) > 0:
-                        data = (hex(int(bin_data + bits_left, 2))[2:].zfill(data_len*2)).upper()
+                        data = (hex(int(bin_data + bits_left, 2))[2:].zfill(data_len * 2)).upper()
                     else:
                         data = (hex(int(bin_data, 2))[2:].zfill(int(len(bin_data) / 4))).upper()
                 except KeyError:
@@ -371,7 +368,7 @@ class J1939Fuzzer:
                 for i in range(0, data_len):
                     data_byte = hex(random.randint(0, 255))[2:].zfill(2)
                     data += data_byte
-        message = td.J1939_Message(priority, pgn, dst_addr, src_addr, data)
+        message = J1939Message(priority, pgn, dst_addr, src_addr, data)
         return message
 
     '''
@@ -385,11 +382,11 @@ class J1939Fuzzer:
         num_crashes = 0
         while not self.done_fuzzing:
             self.devil._m2.flushInput()
-            self.devil.startDataCollection()
+            self.devil.start_data_collection()
             time.sleep(self.sm.check_frequency)
             if self.done_fuzzing:
                 break
-            incoming_messages = self.devil.stopDataCollection()
+            incoming_messages = self.devil.stop_data_collection()
             # crash analysis
             any_anomalies = False
             after_fuzz = []
@@ -450,9 +447,9 @@ class J1939Fuzzer:
                 filename_current = "crashReport_" + str(int(start_time)) + "_current_" + str(num_crashes)
                 if len(previous_interval_messages) > 0:
                     print("    Stored previous interval fuzzed messages to: " + filename_previous)
-                    self.devil.saveDataCollected(previous_interval_messages, filename_previous, False)
+                    self.devil.save_data_collected(previous_interval_messages, filename_previous, False)
                 print("    Stored current interval fuzzed messages to: " + filename_current)
-                self.devil.saveDataCollected(self.fuzzed_messages, filename_current, False)
+                self.devil.save_data_collected(self.fuzzed_messages, filename_current, False)
 
                 val = input("Please restart the ECU. Once complete, enter 'y' to continue / 'q' to quit fuzzing: ")
                 if val.lower() == "yes" or val.lower() == "y":
@@ -521,9 +518,9 @@ class J1939Fuzzer:
     def record_baseline(self):
         self.devil._m2.flushInput()
         print("Baselining for " + str(self.sm.baseline_time) + " seconds...")
-        self.devil.startDataCollection()
+        self.devil.start_data_collection()
         time.sleep(self.sm.baseline_time)
-        self.baseline_messages = self.devil.stopDataCollection()
+        self.baseline_messages = self.devil.stop_data_collection()
         if len(self.baseline_messages) == 0:
             return []
 
@@ -559,10 +556,10 @@ def progressbar(it, prefix="", size=60, file=sys.stdout):
 
 class FuzzerCommands(cmd.Cmd):
     # TODO: add save and load commands to save/load settings/test cases/baseline/targets
-    intro = "Welcome to the TruckDevil J1939 Fuzzer."
-    prompt = "(truckdevil.fuzz) "
+    intro = "Welcome to the truckdevil J1939 Fuzzer."
+    prompt = "(truckdevil.j1939_fuzzer) "
 
-    def __init__(self, devil):
+    def __init__(self, argv):
         super().__init__()
         self.fz = J1939Fuzzer(devil)
 
@@ -570,6 +567,7 @@ class FuzzerCommands(cmd.Cmd):
         """Show the settings and each setting value"""
         print(self.fz.sm)
         return
+
     def do_save(self, arg):
         """
         Save settings, targets, generated test cases, baseline, or all information.
@@ -716,8 +714,10 @@ class FuzzerCommands(cmd.Cmd):
         """
         if len(self.fz.baseline_messages) == 0:
             print("No baseline has been recorded yet. See the record baseline command.")
-        print("Recorded {:<6} messages in {:<6} seconds".format(len(self.fz.baseline_messages), self.fz.sm.baseline_time))
-        print("Baseline time: {:<6} messages per second".format(len(self.fz.baseline_messages) / self.fz.sm.baseline_time))
+        print(
+            "Recorded {:<6} messages in {:<6} seconds".format(len(self.fz.baseline_messages), self.fz.sm.baseline_time))
+        print("Baseline time: {:<6} messages per second".format(
+            len(self.fz.baseline_messages) / self.fz.sm.baseline_time))
 
     def do_generate_test_cases(self, arg):
         """
@@ -752,7 +752,7 @@ class FuzzerCommands(cmd.Cmd):
         try:
             for i in progressbar(range(self.fz.sm.num_messages), "Sending: ", 40):
                 m = self.fz.test_cases[i]
-                #print(m)
+                # print(m)
                 self.fz.devil.sendMessage(m)
                 with self.fz.lock_fuzzed_messages:
                     self.fz.fuzzed_messages.append(m)
@@ -782,6 +782,6 @@ class FuzzerCommands(cmd.Cmd):
         sys.exit(0)
 
 
-def main_mod(devil):
-    fcli = FuzzerCommands(devil)
+def main_mod(argv):
+    fcli = FuzzerCommands(argv)
     fcli.cmdloop()

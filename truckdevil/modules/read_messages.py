@@ -1,8 +1,14 @@
 import argparse
-import truckDevil as td
+from j1939.j1939 import J1939Interface
 
 
-def main_mod(devil):
+def main_mod(argv, device=None):
+    print(argv)
+    if device is None:
+        print("Device must be added first.")
+        return
+    interface = J1939Interface(device)
+
     print("\n***** Read Messages *****")
     print("Read and print all messages from CAN device.")
     ap = argparse.ArgumentParser(usage="[-h] [-t READ_TIME] [-n NUM_MESSAGES] [-a] [-l] [-v]",
@@ -28,8 +34,9 @@ def main_mod(devil):
         except (SystemExit, ValueError) as e:
             print(e)
             continue
-        devil.printMessages(args['abstract_TPM'], args['read_time'], args['num_messages'], args['verbose'],
-                            args['log_to_file'])
+
+        interface.print_messages(args['abstract_TPM'], args['read_time'], args['num_messages'], args['verbose'],
+                                 args['log_to_file'])
 
 
 def main():
@@ -54,9 +61,9 @@ def main():
 
     args = vars(ap.parse_args())
 
-    devil = td.TruckDevil(args['device_type'], args['port'], args['can_channel'], args['can_baud'])
-    devil.printMessages(args['abstract_TPM'], args['read_time'], args['num_messages'], args['verbose'],
-                        args['log_to_file'])
+    devil = J1939Interface(args['device_type'], args['port'], args['can_channel'], args['can_baud'])
+    devil.print_messages(args['abstract_TPM'], args['read_time'], args['num_messages'], args['verbose'],
+                         args['log_to_file'])
     devil.done()
 
 
