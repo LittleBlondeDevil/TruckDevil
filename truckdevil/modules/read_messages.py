@@ -3,7 +3,6 @@ from j1939.j1939 import J1939Interface
 
 
 def main_mod(argv, device=None):
-    print(argv)
     if device is None:
         print("Device must be added first.")
         return

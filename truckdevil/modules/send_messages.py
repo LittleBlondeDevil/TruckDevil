@@ -1,5 +1,6 @@
 import argparse
 from j1939.j1939 import J1939Interface, J1939Message
+#from libs.device import Device
 
 
 def get_vals_from_args(args):
@@ -25,7 +26,7 @@ def get_vals_from_args(args):
     return pgn, priority, src_addr, dst_addr
 
 
-def main_mod(devil, argv):
+def main_mod(argv, device=None):
     print("\n***** Send Message *****")
     print("Send message to CAN device to get pushed to the BUS.")
     ap = argparse.ArgumentParser(usage="pgn data [-h] [-p PRIORITY] [-a SRC_ADDR] [-d DST_ADDR] [-v]")
@@ -46,11 +47,13 @@ def main_mod(devil, argv):
         try:
             args = vars(ap.parse_args(arg_input.split()))
             pgn, priority, src_addr, dst_addr = get_vals_from_args(args)
-            message = J1939Message(priority, pgn, dst_addr, src_addr, args['data'])
+            #message = J1939Message(priority, pgn, dst_addr, src_addr, args['data'])
+            devil = J1939Interface(device)
+            message = J1939Message(0x18EF0BF9, "112233445566778899AABBCC")
         except (SystemExit, ValueError) as e:
             print(e)
             continue
-        devil.sendMessage(message)
+        devil.send_message(message)
         if args['verbose'] is not None and args['verbose'] == 1:
             print(str(message))
         elif args['verbose'] is not None and args['verbose'] >= 2:
@@ -80,10 +83,13 @@ def main():
     args = vars(ap.parse_args())
     pgn, priority, src_addr, dst_addr = get_vals_from_args(args)
 
-    devil = J1939Interface(args['device_type'], args['port'], args['can_channel'], args['can_baud'])
-
-    message = J1939Message(priority, pgn, dst_addr, src_addr, args['data'])
-    devil.sendMessage(message)
+    #devil = J1939Interface(args['device_type'], args['port'], args['can_channel'], args['can_baud'])
+    device = Device(args['device_type'], args['port'], args['can_channel'], args['can_baud'])
+    devil = J1939Interface(device)
+    message = J1939Message(int("18AA00F9", 16), "112233445566778899AABBCCDD")
+    devil.send_message(message)
+    #message = J1939Message(priority, pgn, dst_addr, src_addr, args['data'])
+    #devil.sendMessage(message)
 
     if args['verbose'] is not None and args['verbose'] == 1:
         print(str(message))

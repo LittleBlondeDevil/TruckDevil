@@ -5,7 +5,7 @@ import threading
 import copy
 import sys
 
-from j1939.j1939 import J1939Message
+from j1939.j1939 import J1939Message, J1939Interface, j1939_fields_to_can_id
 
 from libs.settings import SettingsManager, Setting
 
@@ -90,14 +90,14 @@ class J1939Fuzzer:
                 data_snip = self.reboot_data_snip
             return "address: {:<3} reboot_pgn: {:<5} reboot_data_snip: {}".format(self.address, pgn, data_snip)
 
-    def __init__(self, devil):
+    def __init__(self, device):
         self._targets = []  # Each target should have an optional field to specify what message is sent from the ECU
 
         self.baseline = []
         self.baseline_messages = []
         self.test_cases = []
 
-        self.devil = devil
+        self.devil = J1939Interface(device)
         self.done_fuzzing = False
         self.pause_fuzzing = False
         self.fuzzed_messages = []
@@ -132,11 +132,25 @@ class J1939Fuzzer:
                 "baseline and the current interval to determine if a crash has occurred. "
                 "A percentage value is expected."),
 
+            Setting("test_case_can_id", 0).add_constraint("range", lambda x: 0 <= x <= 0x1FFFFFFF)
+                .add_description("CAN ID set for each test case."),
+
             Setting("test_case_priority", 0).add_constraint("range", lambda x: 0 <= x <= 7)
                 .add_description("Priority set for each test case."),
 
-            Setting("test_case_pgn", 0).add_constraint("range", lambda x: 0 <= x <= 65535)
-                .add_description("PGN value set on each test case"),
+            Setting("test_case_reserved_bit", 0).add_constraint("range", lambda x: 0 <= x <= 1)
+                .add_description("Reserved bit of CAN ID for each test case."),
+
+            Setting("test_case_data_page_bit", 0).add_constraint("range", lambda x: 0 <= x <= 1)
+                .add_description("Data page bit of CAN ID for each test case."),
+
+            Setting("test_case_pdu_format", 0).add_constraint("range", lambda x: 0 <= x <= 255)
+                .add_description("PDU Format byte for each test case. 0-239 for destination specific, 240+ "
+                                 "for broadcast."),
+
+            Setting("test_case_pdu_specific", 0).add_constraint("range", lambda x: 0 <= x <= 255)
+                .add_description("PDU Specific byte for each test case. If PDU Format is 0-239, this is the destination"
+                                 " address. If PDU Format is 240+, this is extension."),
 
             Setting("test_case_src_address", 0).add_constraint("range", lambda x: 0 <= x <= 255)
                 .add_description("Source address to set for each test case"),
@@ -149,8 +163,17 @@ class J1939Fuzzer:
             Setting("mutate_priority", False).add_constraint("boolean", lambda x: type(x) is bool)
                 .add_description("Should the generator mutate the test case priority field?"),
 
-            Setting("mutate_pgn", False).add_constraint("boolean", lambda x: type(x) is bool)
-                .add_description("Should the generator mutate the test case pgn?"),
+            Setting("mutate_reserved_bit", False).add_constraint("boolean", lambda x: type(x) is bool)
+                .add_description("Should the generator mutate the test case reserved bit field?"),
+
+            Setting("mutate_data_page_bit", False).add_constraint("boolean", lambda x: type(x) is bool)
+                .add_description("Should the generator mutate the test case data page bit field?"),
+
+            Setting("mutate_pdu_format", False).add_constraint("boolean", lambda x: type(x) is bool)
+                .add_description("Should the generator mutate the test case PDU Format field?"),
+
+            Setting("mutate_pdu_specific", False).add_constraint("boolean", lambda x: type(x) is bool)
+                .add_description("Should the generator mutate the test case PDU Specific field?"),
 
             Setting("mutate_src_address", False).add_constraint("boolean", lambda x: type(x) is bool)
                 .add_description("Should the generator mutate the source address?"),
@@ -221,37 +244,39 @@ class J1939Fuzzer:
             if t.address == address:
                 self._targets[idx] = self.Target(address, pgn, data)
 
-    '''
-    given a J1939_Message, mutate different parts of it randomly depending on the arguments
-    message: required, this is the starting message that will be mutated
-    mutate_priority: if true, modify priority to a random value between 0-7
-    mutate_src_addr: if true, modify src_addr to a random value between 0-255
-    mutate_dst_addr: if true, modify dst_addr to a random value between 0-255
-    mutate_pgn: if true, modify the pgn to a random value depending on the value of dst_addr.
-                if the dst_addr is 0xFF, make pgn random value of 0-65535
-                if the dst_addr is <0xFF, make pgn random value of 0-61439 (only modifying the first byte, second byte will be 0x00)
-    mutate_data: if true, mutates a random number of bytes to random values between 0-255. Keeps data length the same.
-    returns the mutated message
-    '''
+    def mutate(self, message: J1939Message, mutate_priority=False, mutate_reserved_bit=False,
+               mutate_data_page_bit=False, mutate_pdu_format=False, mutate_pdu_specific=False, mutate_src_addr=False,
+               mutate_data=False, mutate_data_length=False) -> J1939Message:
+        """
+        Given a J1939_Message, mutate different parts of it randomly depending on the arguments
 
-    def mutate(self, message, mutate_priority=False, mutate_src_addr=False, mutate_dst_addr=False, mutate_pgn=False,
-               mutate_data=False, mutate_data_length=False):
+        :param message: required, this is the starting message that will be mutated
+        :param mutate_priority: if true, modify priority to a random value between 0-7
+        :param mutate_reserved_bit: if true, modify reserved bit to either 0 or 1
+        :param mutate_data_page_bit: if true, modify data page bit to either 0 or 1
+        :param mutate_pdu_format: if true, modify pdu format 50% chance of being 0-239, 50% chance of being 240-255
+        :param mutate_pdu_specific: if true, modify pdu specific to random value between 0-255
+        :param mutate_src_addr: if true, modify source address to a random value between 0-255
+        :param mutate_data: if true, mutates a random number of bytes to random values between 0-255.
+        :param mutate_data_length: if true, makes the data either shorter or longer
+        :return: the mutated message
+        """
         if mutate_priority:
-            pri = random.randint(0, 7)
-            message.priority = pri
+            message.priority = random.randint(0, 7)
+        if mutate_reserved_bit:
+            message.reserved_bit = random.randint(0, 1)
+        if mutate_data_page_bit:
+            message.data_page_bit = random.randint(0, 1)
+        if mutate_pdu_format:
+            destination_specific = random.randint(0, 1)
+            if destination_specific:
+                message.pdu_format = random.randint(0, 239)
+            else:
+                message.pdu_format = random.randint(240, 255)
+        if mutate_pdu_specific:
+            message.pdu_specific = random.randint(0, 255)
         if mutate_src_addr:
             message.src_addr = random.randint(0, 255)
-        if mutate_dst_addr:
-            message.dst_addr = random.randint(0, 255)
-        if mutate_pgn:
-            if message.dst_addr == 255:
-                val = random.randint(0, 65535)  # include destination specific and broadcast PGNs
-            else:
-                val = random.randint(0, 61439)  # only include destination specific PGNs
-
-            if val < 61440:  # if in the destination specific range
-                val = val & 0xFF00  # only use the first byte
-            message.pgn = val
         message_data_bytes = int(len(message.data) / 2)
         if mutate_data and message_data_bytes > 0:
             num_bytes_to_mutate = random.randint(1, message_data_bytes)
@@ -284,39 +309,52 @@ class J1939Fuzzer:
         :param test_case_values:
             See below
         :Keyword Arguments:
+            can_id: optional int, if not given then generate the other fields to create the can_id
             priority: optional int, if not given then generate a random one between 0-7
-            pgn: optional int, if not given then generate a random one between 0-65535
-            dst_addr: optional int, if not given then generate a random one between 0-255
+            reserved_bit: optional int, if not given then generate a random one between 0-1
+            data_page_bit: optional int, if not given then generate a random one between 0-1
+            pdu_format: optional int, if not given then generate a random one between 0-255
+            pdu_specific: optional int, if not given then generate a random one between 0-255
             src_addr: optional int, if not given then generate a random one between 0-255
             data: optional hex string, if not given then generate a hex string based on one of three options
         :return: J1939_Message object containing the generated message
         """
-        priority = test_case_values.setdefault("priority", random.randint(0, 7))
-        dst_addr = test_case_values.setdefault("dst_addr", random.randint(0, 255))
-        src_addr = test_case_values.setdefault("src_addr", random.randint(0, 255))
-        pgn = test_case_values.setdefault("pgn", None)
-        data = test_case_values.setdefault("data", None)
-        if pgn is None:
-            destination_specific = random.randint(0, 1)
-            if destination_specific:
-                pgn = random.randint(0, 61439)  # only include destination specific PGNs
+        can_id = test_case_values.setdefault("can_id", None)
+        if can_id is None:
+            priority = test_case_values.setdefault("priority", random.randint(0, 7))
+            reserved_bit = test_case_values.setdefault("reserved_bit", random.randint(0, 1))
+            data_page_bit = test_case_values.setdefault("data_page_bit", random.randint(0, 1))
+            src_addr = test_case_values.setdefault("src_addr", random.randint(0, 255))
+            pdu_format = test_case_values.setdefault("pdu_format", None)
+            if pdu_format is None:
+                destination_specific = random.randint(0, 1)
+                if destination_specific:
+                    pdu_format = random.randint(0, 239)
+                else:
+                    pdu_format = random.randint(240, 255)
+            pdu_specific = test_case_values.setdefault("pdu_specific", random.randint(0, 255))
+
+            if pdu_format < 240:
+                pgn = pdu_format << 8
             else:
-                pgn = random.randint(61440, 65535)  # broadcast range
-        if pgn <= 255:  # pgn is only 2 hex digits
-            pgn = 0
-        elif 255 < pgn <= 4095:  # pgn is only 3 hex digits
-            pgn = pgn & 0xF00  # only use the first nibble
-        elif 4095 < pgn < 61440:  # if in the destination specific range
-            pgn = pgn & 0xFF00  # only use the first byte
+                pgn = (pdu_format << 8) + pdu_specific
+
+            can_id = j1939_fields_to_can_id(priority, reserved_bit, data_page_bit, pdu_format, pdu_specific, src_addr)
+        else:
+            pgn = can_id >> 8 & 0xFFFF
+            if pgn < 0xF000:
+                pgn = can_id >> 8 & 0xFF00
         if pgn == 60928 and option == 0:
             option = 1
+
+        data = test_case_values.setdefault("data", None)
         if data is None:
             if 2 < option < 0:
                 option = random.randint(0, 2)
             if option == 0:
                 data = ''
                 try:
-                    pgn_info = self.devil._pgn_list[str(pgn)]
+                    pgn_info = self.devil.pgn_list[str(pgn)]
                     if isinstance(pgn_info['pgnDataLength'], int):
                         data_len = pgn_info['pgnDataLength']
                     else:
@@ -325,7 +363,7 @@ class J1939Fuzzer:
                     bin_data = ''
                     used_bits = 0
                     for spn in spn_list:
-                        spn_info = self.devil._spn_list[str(spn)]
+                        spn_info = self.devil.spn_list[str(spn)]
                         if isinstance(spn_info['spnLength'], int):
                             spn_length = spn_info['spnLength']  # number of bits
                         else:
@@ -349,7 +387,7 @@ class J1939Fuzzer:
                     option = 1
             if option == 1:
                 try:
-                    pgn_info = self.devil._pgn_list[str(pgn)]
+                    pgn_info = self.devil.pgn_list[str(pgn)]
                     if isinstance(pgn_info['pgnDataLength'], int):
                         data_len = pgn_info['pgnDataLength']  # number of bytes to generate is based on data length
                         # specified in pgn
@@ -368,20 +406,19 @@ class J1939Fuzzer:
                 for i in range(0, data_len):
                     data_byte = hex(random.randint(0, 255))[2:].zfill(2)
                     data += data_byte
-        message = J1939Message(priority, pgn, dst_addr, src_addr, data)
+        message = J1939Message(can_id, data)
         return message
 
-    '''
-    checks for anomalies/differences from the baseline every x seconds, 
-    based on check_frequency variable
-    '''
-
     def anomaly_check(self):
+        """
+        Checks for anomalies/differences from the baseline every x seconds, based on check_frequency variable
+        """
         start_time = time.time()
         previous_interval_messages = []
         num_crashes = 0
         while not self.done_fuzzing:
-            self.devil._m2.flushInput()
+            if self.devil.device.m2_used:
+                self.devil.device.m2.flushInput()
             self.devil.start_data_collection()
             time.sleep(self.sm.check_frequency)
             if self.done_fuzzing:
@@ -474,49 +511,70 @@ class J1939Fuzzer:
             if choice == 0:
                 mutate_index = random.randint(0, len(self.baseline_messages) - 1)
                 m = copy.copy(self.baseline_messages[mutate_index])
-                if self.sm["test_case_priority"].updated:
-                    m.priority = self.sm.test_case_priority
-                if self.sm["test_case_src_address"].updated:
-                    m.src_addr = self.sm.test_case_src_address
-                if self.sm["test_case_pgn"].updated:
-                    m.pgn = self.sm.test_case_pgn
+                if self.sm["test_case_can_id"].updated:
+                    m.can_id = self.sm.test_case_can_id
+                else:
+                    if self.sm["test_case_priority"].updated:
+                        m.priority = self.sm.test_case_priority
+                    if self.sm['test_case_reserved_bit'].updated:
+                        m.reserved_bit = self.sm.test_case_reserved_bit
+                    if self.sm['test_case_data_page_bit'].updated:
+                        m.data_page_bit = self.sm.test_case_data_page_bit
+                    if self.sm['test_case_pdu_format'].updated:
+                        m.pdu_format = self.sm.test_case_pdu_format
+                    if self.sm['test_case_pdu_specific'].updated:
+                        m.pdu_specific = self.sm.test_case_pdu_specific
+                    if self.sm["test_case_src_address"].updated:
+                        m.src_addr = self.sm.test_case_src_address
                 if self.sm["test_case_data"].updated:
                     m.data = self.sm.test_case_data
-                mutate_dst_address = True
-                if len(self.targets) > 0:
-                    which = random.randint(0, len(self.targets) - 1)
-                    target_addr = self.targets[which].address
-                    m.dst_addr = target_addr
-                    mutate_dst_address = False
+                # mutate_pdu_specific = True
+                # if len(self.targets) > 0:
+                #    which = random.randint(0, len(self.targets) - 1)
+                #    target_addr = self.targets[which].address
+                #    m.dst_addr = target_addr
+                #    mutate_pdu_specific = False
 
                 m = self.mutate(m,
                                 self.sm.mutate_priority,
+                                self.sm.mutate_reserved_bit,
+                                self.sm.mutate_data_page_bit,
+                                self.sm.mutate_pdu_format,
+                                self.sm.mutate_pdu_specific,
                                 self.sm.mutate_src_address,
-                                mutate_dst_address,
-                                self.sm.mutate_pgn,
                                 self.sm.mutate_data,
                                 self.sm.mutate_data_length)
 
             # generate a message
             elif choice == 1:
                 test_case_values = {}
-                if self.sm["test_case_priority"].updated:
-                    test_case_values["priority"] = self.sm.test_case_priority
-                if self.sm["test_case_src_address"].updated:
-                    test_case_values["src_addr"] = self.sm.test_case_src_address
-                if self.sm["test_case_pgn"].updated:
-                    test_case_values["pgn"] = self.sm.test_case_pgn
+                if self.sm["test_case_can_id"].updated:
+                    test_case_values["can_id"] = self.sm.test_case_can_id
+                else:
+                    if self.sm["test_case_priority"].updated:
+                        test_case_values["priority"] = self.sm.test_case_priority
+                    if self.sm["test_case_reserved_bit"].updated:
+                        test_case_values["reserved_bit"] = self.sm.test_case_reserved_bit
+                    if self.sm["test_case_data_page_bit"].updated:
+                        test_case_values["data_page_bit"] = self.sm.test_case_data_page_bit
+                    if self.sm["test_case_pdu_format"].updated:
+                        test_case_values["pdu_format"] = self.sm.test_case_pdu_format
+                    if self.sm["test_case_pdu_specific"].updated:
+                        test_case_values["pdu_specific"] = self.sm.test_case_pdu_specific
+                    if self.sm["test_case_src_address"].updated:
+                        test_case_values["src_addr"] = self.sm.test_case_src_address
                 if self.sm["test_case_data"].updated:
                     test_case_values["data"] = self.sm.test_case_data
-                if len(self.targets) > 0:
-                    which = random.randint(0, len(self.targets) - 1)
-                    test_case_values["dst_addr"] = self.targets[which].address
+                #if len(self.targets) > 0:
+                #    which = random.randint(0, len(self.targets) - 1)
+                #    test_case_values["dst_addr"] = self.targets[which].address
                 m = self.generate(option=self.sm.generate_data_option, **test_case_values)
             self.test_cases.append(m)
         return
 
     def record_baseline(self):
-        self.devil._m2.flushInput()
+        if self.devil.device.m2_used:
+            self.devil.device.m2.flushInput()
         print("Baselining for " + str(self.sm.baseline_time) + " seconds...")
         self.devil.start_data_collection()
         time.sleep(self.sm.baseline_time)
@@ -559,9 +617,9 @@ class FuzzerCommands(cmd.Cmd):
     intro = "Welcome to the truckdevil J1939 Fuzzer."
     prompt = "(truckdevil.j1939_fuzzer) "
 
-    def __init__(self, argv):
+    def __init__(self, argv, device):
         super().__init__()
-        self.fz = J1939Fuzzer(devil)
+        self.fz = J1939Fuzzer(device)
 
     def do_settings(self, arg):
         """Show the settings and each setting value"""
@@ -753,7 +811,7 @@ class FuzzerCommands(cmd.Cmd):
             for i in progressbar(range(self.fz.sm.num_messages), "Sending: ", 40):
                 m = self.fz.test_cases[i]
                 # print(m)
-                self.fz.devil.sendMessage(m)
+                self.fz.devil.send_message(m)
                 with self.fz.lock_fuzzed_messages:
                     self.fz.fuzzed_messages.append(m)
                 time.sleep(self.fz.sm.message_frequency)
@@ -782,6 +840,6 @@ class FuzzerCommands(cmd.Cmd):
         sys.exit(0)
 
 
-def main_mod(argv):
-    fcli = FuzzerCommands(argv)
+def main_mod(argv, device):
+    fcli = FuzzerCommands(argv, device)
     fcli.cmdloop()

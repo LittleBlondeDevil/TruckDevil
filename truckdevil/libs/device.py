@@ -1,6 +1,7 @@
 from can import interface, Message
 import serial
 import time
+import threading
 
 
 class Device:
@@ -17,6 +18,7 @@ class Device:
         self._serial_port = serial_port
         self._channel = channel
         self._can_baud = can_baud
+        self.device_lock = threading.RLock()
         if device_type.lower() == "m2":
             if serial_port is None:
                 raise ValueError("If using M2, serial port must be specified")
@@ -77,13 +79,6 @@ class Device:
             while True:
                 # Receive next character from M2
                 if self._m2.inWaiting() > 0:
-                    # TODO: change back
-                    # b = self._m2.read()
-                    # try:
-                    #    char = b.decode("utf-8")
-                    # except:
-                    #    print("failed: " + str(b))
-                    #    continue
                     char = self._m2.read().decode("utf-8")
                 else:
                     time.sleep(0.01)
@@ -99,12 +94,19 @@ class Device:
                 elif (start_reading is True and len(response) > 0 and
                       response[0] == '$' and char == '*' and
                       response.count('$') == 1):
-                    str_frame = response[1:]
-                    can_id = int(str_frame[0:8], 16)
-                    dlc = int(str_frame[8:10], 16)
-                    data = bytes.fromhex(str_frame[10:])
-                    return Message(arbitration_id=can_id, channel=self._channel, dlc=dlc, data=data,
+                    try:
+                        str_frame = response[1:]
+                        can_id = int(str_frame[0:8], 16)
+                        dlc = int(str_frame[8:10], 16)
+                        # TODO: remove print, or add check to ensure data is not more than 8 bytes long bc some error
+                        #  occurred
+                        data = bytes.fromhex(str_frame[10:])
+                        return Message(arbitration_id=can_id, channel=self._channel, dlc=dlc, data=data,
                                    is_extended_id=True, timestamp=time.time())
+                    except ValueError as e:
+                        print("error in creating Message in device read: {}".format(e))
+                        print("str_frame: {}".format(str_frame))
+                        continue
                 # If the serial buffer gets flushed during reading
                 elif response.count('$') > 1:
                     response = ""
@@ -118,10 +120,10 @@ class Device:
 
     def send(self, msg: Message):
         if self.m2_used:
-            # convert from Message to 1CECFF000820120003FFCAFE00 format
+            # convert from Message to $1CECFF000820120003FFCAFE00* format
             can_id = hex(msg.arbitration_id)[2:].zfill(8)
             dlc = hex(msg.dlc)[2:].zfill(2)
             data = ''.join('{:02x}'.format(x) for x in msg.data)
-            self.m2.write("{}{}{}".format(can_id, dlc, data).encode('utf-8'))
+            self.m2.write("${}{}{}*".format(can_id, dlc, data).encode('utf-8'))
         else:
             self._can_bus.send(msg)

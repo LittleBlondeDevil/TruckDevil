@@ -18,18 +18,18 @@ class Setting:
 
     """
 
-    def __init__(self, name: str, defval: Any):
+    def __init__(self, name: str, def_val: Any):
         """
         Create a setting object with the given name and value, the type of
         this setting will be inferred from the default value, so make sure it
         has the same type as what's desired.
 
         :param name: str - string name of this setting
-        :param defval: Any - the default value of this setting
+        :param def_val: Any - the default value of this setting
         """
         self.name = name
-        self.datatype = type(defval)
-        self.default_value = defval
+        self.datatype = type(def_val)
+        self.default_value = def_val
         self._value = None
         self.constraints = {}
         self.description = ""
@@ -47,23 +47,23 @@ class Setting:
         return self._value
 
     @value.setter
-    def value(self, newvalue: Any):
+    def value(self, new_value: Any):
         """
         Set this setting's value with type checking
 
-        :param newvalue: Any - Value to set this setting to
+        :param new_value: Any - Value to set this setting to
         """
 
         if len(self.constraints) > 0:
             for name in self.constraints:
-                if not self.constraints[name](newvalue):
-                    raise ValueError("constraint {} excludes {}".format(name, newvalue))
+                if not self.constraints[name](new_value):
+                    raise ValueError("constraint {} excludes {}".format(name, new_value))
 
-        if type(newvalue) == self.datatype:
-            self._value = newvalue
+        if type(new_value) == self.datatype:
+            self._value = new_value
             return
 
-        raise ValueError("expected a {} but got {} ({})".format(type(self.datatype), type(newvalue), newvalue))
+        raise ValueError("expected a {} but got {} ({})".format(type(self.datatype), type(new_value), new_value))
 
     @property
     def updated(self):
@@ -90,7 +90,7 @@ class Setting:
 
     def __str__(self):
         return fill("{:<24} {:>12} (default: {:<5}) {:<}".format(
-            self.name, self.value, self.default_value, self.description), width=120, subsequent_indent=" "*55)
+            self.name, self.value, self.default_value, self.description), width=120, subsequent_indent=" " * 55)
 
 
 class SettingsManager:
@@ -130,7 +130,7 @@ class SettingsManager:
         raise ValueError("setting name not found")
 
     def __str__(self):
-        retval = ""
+        ret_val = ""
         for name in self.settings:
-            retval += str(self.settings[name]) + "\n"
-        return retval
+            ret_val += str(self.settings[name]) + "\n"
+        return ret_val
