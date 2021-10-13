@@ -220,14 +220,16 @@ class J1939Interface:
         """
         if self._data_collection_occurring:
             raise Exception('data collection already started')
+
+        # Wait until the previous collection thread has stopped
+        if self._collection_thread is not None and self._collection_thread.is_alive():
+            self._collection_thread.join()
+
         self._clear_collected_messages()
 
         self._data_collection_occurring = True
-
-        if self._collection_thread is None or self._collection_thread.is_alive() is False:
-            # If collectionThread hasn't been started before
-            self._collection_thread = threading.Thread(target=self._read_message, args=(abstract_tpm,),daemon=True)
-            self._collection_thread.start()
+        self._collection_thread = threading.Thread(target=self._read_message, args=(abstract_tpm,), daemon=True)
+        self._collection_thread.start()
 
     def stop_data_collection(self):
         """
@@ -306,9 +308,7 @@ class J1939Interface:
             if not self.data_collection_occurring:
                 break
             j1939_message = self.read_one_message(abstract_tpm, self.m_manager)
-            with self._lock_collected_messages:
-                # Add message to collectedMessages list
-                self._collected_messages.append(j1939_message)
+            self._add_to_collected_messages(j1939_message)
 
     def read_one_message(self, abstract_tpm=False, message_manager=None):
         if message_manager is None:

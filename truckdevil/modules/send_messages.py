@@ -48,8 +48,9 @@ def main_mod(argv, device=None):
             args = vars(ap.parse_args(arg_input.split()))
             pgn, priority, src_addr, dst_addr = get_vals_from_args(args)
             #message = J1939Message(priority, pgn, dst_addr, src_addr, args['data'])
+            # TODO: make this based on user input again
             devil = J1939Interface(device)
-            message = J1939Message(0x18EF0BF9, "112233445566778899AABBCC")
+            message = J1939Message(0x18EF0BF9, "1122334455667788")
         except (SystemExit, ValueError) as e:
             print(e)
             continue
@@ -86,7 +87,7 @@ def main():
     #devil = J1939Interface(args['device_type'], args['port'], args['can_channel'], args['can_baud'])
     device = Device(args['device_type'], args['port'], args['can_channel'], args['can_baud'])
     devil = J1939Interface(device)
-    message = J1939Message(int("18AA00F9", 16), "112233445566778899AABBCCDD")
+    message = J1939Message(int("18AA00F9", 16), "1122334455667788")
     devil.send_message(message)
     #message = J1939Message(priority, pgn, dst_addr, src_addr, args['data'])
     #devil.sendMessage(message)

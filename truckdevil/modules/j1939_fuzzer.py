@@ -418,7 +418,7 @@ class J1939Fuzzer:
         num_crashes = 0
         while not self.done_fuzzing:
             if self.devil.device.m2_used:
-                self.devil.device.m2.flushInput()
+                self.devil.device.flush_m2()
             self.devil.start_data_collection()
             time.sleep(self.sm.check_frequency)
             if self.done_fuzzing:
@@ -574,7 +574,7 @@ class J1939Fuzzer:
 
     def record_baseline(self):
         if self.devil.device.m2_used:
-            self.devil.device.m2.flushInput()
+            self.devil.device.flush_m2()
         print("Baselining for " + str(self.sm.baseline_time) + " seconds...")
         self.devil.start_data_collection()
         time.sleep(self.sm.baseline_time)
@@ -771,7 +771,7 @@ class FuzzerCommands(cmd.Cmd):
         Show the baseline results
         """
         if len(self.fz.baseline_messages) == 0:
-            print("No baseline has been recorded yet. See the record baseline command.")
+            print("No baseline has been recorded yet. See the record_baseline command.")
         print(
             "Recorded {:<6} messages in {:<6} seconds".format(len(self.fz.baseline_messages), self.fz.sm.baseline_time))
         print("Baseline time: {:<6} messages per second".format(

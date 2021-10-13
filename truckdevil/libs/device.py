@@ -19,6 +19,7 @@ class Device:
         self._channel = channel
         self._can_baud = can_baud
         self.device_lock = threading.RLock()
+        self._acknowledged_flush = True
         if device_type.lower() == "m2":
             if serial_port is None:
                 raise ValueError("If using M2, serial port must be specified")
@@ -26,10 +27,10 @@ class Device:
                 port=serial_port, baudrate=115200,
                 dsrdtr=True
             )
-            # self._m2.setDTR(True)
+            self._m2.setDTR(True)
             # self._lockM2 = threading.RLock()
             # Ensure that can_baud is filled to 7 digits
-
+            self.init_m2(self._can_baud, self._channel)
             self._m2used = True
         else:
             self._can_bus = interface.Bus(bustype=device_type, channel=channel, bitrate=can_baud)
@@ -68,6 +69,10 @@ class Device:
             baud_to_send += "can0"
         self.m2.write(baud_to_send.encode('utf-8'))
 
+    def flush_m2(self):
+        self._acknowledged_flush = False
+        self.m2.reset_input_buffer()
+
     def read(self) -> Message:
         """
         Reads one message from device, creates python-can Message, and returns it
@@ -77,6 +82,10 @@ class Device:
             start_reading = False
             char = ''
             while True:
+                if not self._acknowledged_flush:
+                    response = ""
+                    start_reading = False
+                    self._acknowledged_flush = True
                 # Receive next character from M2
                 if self._m2.inWaiting() > 0:
                     char = self._m2.read().decode("utf-8")
@@ -96,13 +105,15 @@ class Device:
                       response.count('$') == 1):
                     try:
                         str_frame = response[1:]
+                        if len(str_frame) < 10:
+                            raise ValueError("str_frame too short, error occurred")
                         can_id = int(str_frame[0:8], 16)
                         dlc = int(str_frame[8:10], 16)
                         # TODO: remove print, or add check to ensure data is not more than 8 bytes long bc some error
                         #  occurred
                         data = bytes.fromhex(str_frame[10:])
                         return Message(arbitration_id=can_id, channel=self._channel, dlc=dlc, data=data,
-                                   is_extended_id=True, timestamp=time.time())
+                                       is_extended_id=True, timestamp=time.time())
                     except ValueError as e:
                         print("error in creating Message in device read: {}".format(e))
                         print("str_frame: {}".format(str_frame))
@@ -111,7 +122,6 @@ class Device:
                 elif response.count('$') > 1:
                     response = ""
                     start_reading = False
-                    char = ''
         else:
             msg = None
             while msg is None:
