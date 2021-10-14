@@ -73,25 +73,26 @@ class Device:
         self._acknowledged_flush = False
         self.m2.reset_input_buffer()
 
-    def read(self) -> Message:
+    def read(self, timeout=None) -> Message:
         """
         Reads one message from device, creates python-can Message, and returns it
+        If optional timeout occurs, return None
         """
         if self.m2_used:
             response = ""
             start_reading = False
             char = ''
+            self._m2.timeout = timeout
             while True:
                 if not self._acknowledged_flush:
                     response = ""
                     start_reading = False
                     self._acknowledged_flush = True
                 # Receive next character from M2
-                if self._m2.inWaiting() > 0:
-                    char = self._m2.read().decode("utf-8")
-                else:
-                    time.sleep(0.01)
-                    continue
+                char = self._m2.read().decode("utf-8")
+                if len(char) == 0:  # timeout occurred
+                    self._m2.timeout = None
+                    return None
                 # Denotes start of CAN message
                 if start_reading is False and char == '$':
                     response = '$'
@@ -123,9 +124,7 @@ class Device:
                     response = ""
                     start_reading = False
         else:
-            msg = None
-            while msg is None:
-                msg = self._can_bus.recv(0.01)
+            msg = self._can_bus.recv(timeout=timeout)
             return msg
 
     def send(self, msg: Message):

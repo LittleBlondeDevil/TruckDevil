@@ -228,7 +228,7 @@ class J1939Interface:
         self._clear_collected_messages()
 
         self._data_collection_occurring = True
-        self._collection_thread = threading.Thread(target=self._read_message, args=(abstract_tpm,), daemon=True)
+        self._collection_thread = threading.Thread(target=self._read_message, args=(abstract_tpm, 0.5,), daemon=True)
         self._collection_thread.start()
 
     def stop_data_collection(self):
@@ -298,7 +298,7 @@ class J1939Interface:
         else:
             raise Exception('file name given does not exist.')
 
-    def _read_message(self, abstract_tpm=True):
+    def _read_message(self, abstract_tpm=True, timeout=None):
         """
         Read and store messages in the collectedMessages array.
         For internal function use.
@@ -307,10 +307,12 @@ class J1939Interface:
             # Keep the thread from executing if not in collection state
             if not self.data_collection_occurring:
                 break
-            j1939_message = self.read_one_message(abstract_tpm, self.m_manager)
+            j1939_message = self.read_one_message(abstract_tpm, self.m_manager, timeout)
+            if j1939_message is None:
+                continue  # timeout occurred
             self._add_to_collected_messages(j1939_message)
 
-    def read_one_message(self, abstract_tpm=False, message_manager=None):
+    def read_one_message(self, abstract_tpm=False, message_manager=None, timeout=None):
         if message_manager is None:
             message_manager = self.m_manager
         while True:
@@ -325,7 +327,9 @@ class J1939Interface:
                 return j1939_message
 
             # Next read from device
-            can_msg = self.device.read()
+            can_msg = self.device.read(timeout=timeout)
+            if can_msg is None:
+                return None  # timeout occurred
             data = ''.join('{:02x}'.format(x) for x in can_msg.data)
             j1939_message = J1939Message(can_msg.arbitration_id, data)
 

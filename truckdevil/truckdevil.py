@@ -80,6 +80,8 @@ class FrameworkCommands(cmd.Cmd):
 
 if __name__ == "__main__":
     fc = FrameworkCommands()
+    # TODO: have first arg be a filename, if exists - load settings/state info and pass to module, if doesn't exist,
+    #  create and pass to modules to save to. Keeps info like ECU information that's been collected, settings
     if len(sys.argv) > 1:
         if sys.argv[1] == "add_device" and "run_module" in sys.argv:
             module_index = sys.argv[1:].index("run_module")
