@@ -391,17 +391,24 @@ class J1939Fuzzer:
                     if isinstance(pgn_info['pgnDataLength'], int):
                         data_len = pgn_info['pgnDataLength']  # number of bytes to generate is based on data length
                         # specified in pgn
+                        data = ''
+                        for i in range(0, data_len):
+                            data_byte = hex(random.randint(0, 255))[2:].zfill(2)
+                            data += data_byte
                     else:
-                        data_len = random.randint(0, 1785)  # number of bytes to generate is random if pgn exists but
+                        raise KeyError
+                        #data_len = random.randint(0, 1785)  # number of bytes to generate is random if pgn exists but
                         # the length is variable
                 except KeyError:
-                    data_len = random.randint(0, 1785)  # number of bytes to generate is random if pgn does not exist
-                data = ''
-                for i in range(0, data_len):
-                    data_byte = hex(random.randint(0, 255))[2:].zfill(2)
-                    data += data_byte
+                    option = 2
+                    #data_len = random.randint(0, 1785)  # number of bytes to generate is random if pgn does not exist
+
             if option == 2:
-                data_len = random.randint(0, 1785)  # number of bytes to generate
+                long = random.randint(0, 1)
+                if long == 1:
+                    data_len = random.randint(9, 1785)  # number of bytes to generate
+                else:
+                    data_len = random.randint(0, 8)  # number of bytes to generate
                 data = ''
                 for i in range(0, data_len):
                     data_byte = hex(random.randint(0, 255))[2:].zfill(2)
@@ -661,7 +668,10 @@ class FuzzerCommands(cmd.Cmd):
             return
         try:
             if self.fz.sm[name].datatype == int:
-                self.fz.sm.set(name, int(argv[1]))
+                if argv[1].startswith("0x"):
+                    self.fz.sm.set(name, int(argv[1], 16))
+                else:
+                    self.fz.sm.set(name, int(argv[1]))
             elif self.fz.sm[name].datatype == float:
                 self.fz.sm.set(name, float(argv[1]))
             elif self.fz.sm[name].datatype == bool:
@@ -810,7 +820,6 @@ class FuzzerCommands(cmd.Cmd):
         try:
             for i in progressbar(range(self.fz.sm.num_messages), "Sending: ", 40):
                 m = self.fz.test_cases[i]
-                # print(m)
                 self.fz.devil.send_message(m)
                 with self.fz.lock_fuzzed_messages:
                     self.fz.fuzzed_messages.append(m)

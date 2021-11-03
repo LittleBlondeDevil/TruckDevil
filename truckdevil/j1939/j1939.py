@@ -96,15 +96,31 @@ class J1939Interface:
         """Used by internal timer for printMessages function."""
         self._print_messages_time_done = True
 
-    def print_messages(self, abstract_tpm=True, read_time=None, num_messages=None, verbose=False, log_to_file=False):
+    def print_messages(self, abstract_tpm=True, read_time=None, num_messages=None, verbose=False, log_to_file=False,
+                       file_name=None, **filters):
         """
-        Read and print all messages from device. If readTime and numMessages are both specified, stop printing when whichever one is reached first.
+        Read and print messages from device based on optional filters provided.
+        Each filter is a list, messages are only read if it satisfies every filter condition.
+        example: (priority is 6 OR 7) AND (src_addr is 11).
+        If readTime and numMessages are both specified, stop printing when whichever one is reached first.
 
-        :param abstract_tpm: whether to abstract multipacket messages or instead to show all Transport Protocol messages (Default value = True)
+        :param abstract_tpm: whether to abstract multipacket messages or instead to show all Transport Protocol messages
+                        (Default value = True)
         :param read_time: the amount of time to print messages for. If not specified, it will not be limited
         :param num_messages: number of messages to print before stopping. If not specified, it will not be limited
         :param verbose: whether or not to print the message in decoded form (Default value = False)
         :param log_to_file: whether or not to log the messages to a file (Default value = False)
+        :param file_name: if log_to_file is True, this will be the name of the log file (Default value =
+                        'log_[time].txt'
+        :param filters:
+            See below
+        :Keyword Arguments:
+            can_id: list of integers, only print messages containing one of these CAN IDs.
+            priority: list of integers, only print messages containing one of these priorities.
+            pdu_format: list of integers, only print messages containing one of these PDU Formats.
+            pdu_specific: list of integers, only print messages containing one of these PDU Specifics.
+            src_addr: list of integers, only print messages containing one of these source addresses
+            data_snippet: list of hex strings, only print messages containing one of these data snippets, ex: "0102AABB"
         """
         # Only allow if data collection is not occurring
         if self.data_collection_occurring:
@@ -120,12 +136,22 @@ class J1939Interface:
         self._print_messages_time_done = False
         # Log to file
         if log_to_file:
-            file_name = 'm2_collected_data_' + str(int(time.time()))
+            if file_name is None:
+                file_name = 'log_{}.txt'.format(str(int(time.time())))
             log_file = open(file_name, "x")
-            log_file.write(
-                """Priority    PGN    Source --> Destination
-                [Num Bytes]    data""" + '\n'
-            )
+            #log_file.write(
+            #    """Priority    PGN    Source --> Destination
+            #    [Num Bytes]    data""" + '\n'
+            #)
+        can_id = filters.setdefault("can_id", [])
+        priority = filters.setdefault("priority", [])
+        pdu_format = filters.setdefault("pdu_format", [])
+        pdu_specific = filters.setdefault("pdu_specific", [])
+        src_addr = filters.setdefault("src_addr", [])
+        data_snippet = filters.setdefault("data_snippet", [])
+
+        if self.device.m2_used:
+            self.device.flush_m2()
         # Keep printing while our timer isn't done or the number of
         # messages to print hasn't been reached (whichever comes first).
         # If neither are utilized, keep going forever
@@ -137,6 +163,13 @@ class J1939Interface:
                     before proceeding with this function"""
                 )
             j1939_message = self.read_one_message(abstract_tpm, self.m_manager)
+            if not ((len(can_id) == 0 or j1939_message.can_id in can_id) and
+                    (len(priority) == 0 or j1939_message.priority in priority) and
+                    (len(pdu_format) == 0 or j1939_message.pdu_format in pdu_format) and
+                    (len(pdu_specific) == 0 or j1939_message.pdu_specific in pdu_specific) and
+                    (len(src_addr) == 0 or j1939_message.src_addr in src_addr) and
+                    (len(data_snippet) == 0 or True in [i.upper() in j1939_message.data.upper() for i in data_snippet])):
+                continue
             # Print/log the message
             if not verbose:
                 print(j1939_message)
@@ -153,11 +186,13 @@ class J1939Interface:
         if read_time is not None:
             self._print_messages_timer.cancel()
 
-    def read_messages_until(self, **params):
+    def read_messages_until(self, rts_response_addr=None, **params):
         """
         Read all messages from device until a specific message is found, at least one parameter should be specified to
         look for.
 
+        :param rts_response_addr: if specified, respond to Request to Send transport protocol messages with a
+                                Clear to Send message containing this source address
         :param params:
             See below
         :Keyword Arguments:
@@ -176,8 +211,10 @@ class J1939Interface:
         if len(params) == 0:
             raise Exception("at least one parameter must be included to search for")
 
+        if self.device.m2_used:
+            self.device.flush_m2()
         collected_messages = []
-        manager = MessageManagement()
+        manager = MessageManagement(rts_response_addr=rts_response_addr)
         while True:
             j1939_message = self.read_one_message(abstract_tpm=False, message_manager=manager)
             collected_messages.append(j1939_message)
@@ -205,18 +242,28 @@ class J1939Interface:
                 if param == "src_addr" and j1939_message.src_addr != target_val:
                     matched = False
                     break
-                if param == "data_contains" and target_val not in j1939_message.data:
+                if param == "data_contains" and target_val.upper() not in j1939_message.data.upper():
                     matched = False
                     break
             if matched:
                 return j1939_message, collected_messages
 
-    def start_data_collection(self, abstract_tpm=True):
+    def start_data_collection(self, abstract_tpm=True, **filters):
         """
-        Starts reading and storing messages
+        Starts reading and storing messages based on optional filters provided. Each filter is a list, messages are only
+        read if it satisfies every filter condition. example: (priority is 6 OR 7) AND (src_addr is 11)
 
         :param abstract_tpm: whether to abstract multipacket messages or instead to show all Transport Protocol messages
          (Default value = True)
+        :param filters:
+            See below
+        :Keyword Arguments:
+            can_id: list of integers, only read messages containing one of these CAN IDs.
+            priority: list of integers, only read messages containing one of these priorities.
+            pdu_format: list of integers, only read messages containing one of these PDU Formats.
+            pdu_specific: list of integers, only read messages containing one of these PDU Specifics.
+            src_addr: list of integers, only read messages containing one of these source addresses
+            data_snippet: list of hex strings, only read messages containing one of these data snippets, ex: "0102AABB"
         """
         if self._data_collection_occurring:
             raise Exception('data collection already started')
@@ -228,7 +275,8 @@ class J1939Interface:
         self._clear_collected_messages()
 
         self._data_collection_occurring = True
-        self._collection_thread = threading.Thread(target=self._read_message, args=(abstract_tpm, 0.5,), daemon=True)
+        self._collection_thread = threading.Thread(target=self._read_message, args=(abstract_tpm, 0.5), kwargs=filters,
+                                                   daemon=True)
         self._collection_thread.start()
 
     def stop_data_collection(self):
@@ -298,11 +346,34 @@ class J1939Interface:
         else:
             raise Exception('file name given does not exist.')
 
-    def _read_message(self, abstract_tpm=True, timeout=None):
+    def _read_message(self, abstract_tpm=True, timeout=None, **filters):
         """
-        Read and store messages in the collectedMessages array.
+        Read and store messages in the collectedMessages array based on optional filters provided.
+        Each filter is a list, messages are only read if it satisfies every filter condition.
+        example: (priority is 6 OR 7) AND (src_addr is 11)
         For internal function use.
+
+        :param abstract_tpm: whether to abstract multipacket messages or instead to show all Transport Protocol messages
+         (Default value = True)
+        :param timeout: amount of time, in seconds, to wait until timing out between attempting to read each message.
+        :param filters:
+            See below
+        :Keyword Arguments:
+            can_id: list of integers, only read messages containing one of these CAN IDs.
+            priority: list of integers, only read messages containing one of these priorities.
+            pdu_format: list of integers, only read messages containing one of these PDU Formats.
+            pdu_specific: list of integers, only read messages containing one of these PDU Specifics.
+            src_addr: list of integers, only read messages containing one of these source addresses
+            data_snippet: list of hex strings, only read messages containing one of these data snippets, ex: "0102AABB"
         """
+        if self.device.m2_used:
+            self.device.flush_m2()
+        can_id = filters.setdefault("can_id", [])
+        priority = filters.setdefault("priority", [])
+        pdu_format = filters.setdefault("pdu_format", [])
+        pdu_specific = filters.setdefault("pdu_specific", [])
+        src_addr = filters.setdefault("src_addr", [])
+        data_snippet = filters.setdefault("data_snippet", [])
         while True:
             # Keep the thread from executing if not in collection state
             if not self.data_collection_occurring:
@@ -310,7 +381,13 @@ class J1939Interface:
             j1939_message = self.read_one_message(abstract_tpm, self.m_manager, timeout)
             if j1939_message is None:
                 continue  # timeout occurred
-            self._add_to_collected_messages(j1939_message)
+            if ((len(can_id) == 0 or j1939_message.can_id in can_id) and
+                    (len(priority) == 0 or j1939_message.priority in priority) and
+                    (len(pdu_format) == 0 or j1939_message.pdu_format in pdu_format) and
+                    (len(pdu_specific) == 0 or j1939_message.pdu_specific in pdu_specific) and
+                    (len(src_addr) == 0 or j1939_message.src_addr in src_addr) and
+                    (len(data_snippet) == 0 or True in [i in j1939_message.data for i in data_snippet])):
+                self._add_to_collected_messages(j1939_message)
 
     def read_one_message(self, abstract_tpm=False, message_manager=None, timeout=None):
         if message_manager is None:
@@ -334,66 +411,94 @@ class J1939Interface:
             j1939_message = J1939Message(can_msg.arbitration_id, data)
 
             # Multipacket message received, broadcasted or peer-to-peer request to send
-            if j1939_message.pgn == 0xec00 and (j1939_message.data[0:2] == "20" or j1939_message.data[0:2] == "10"):
+            if j1939_message.pdu_format == 0xec and (j1939_message.data[0:2] == "20" or j1939_message.data[0:2] == "10"):
                 mp_message = _J1939MultiPacketMessage(j1939_message)
                 message_manager.add_new_conversation(mp_message)
+                if message_manager.respond_rts and j1939_message.pdu_specific == message_manager.rts_response_addr and \
+                        j1939_message.data[0:2] == "10":
+                    data = "11{}01FFFF{}".format(j1939_message.data[6:8], j1939_message.data[10:16])
+                    tmp = J1939Message(j1939_message.can_id, data)
+                    tmp.src_addr = message_manager.rts_response_addr
+                    tmp.pdu_specific = j1939_message.src_addr
+                    self.send_message(tmp)
                 if abstract_tpm:
                     continue
+            elif j1939_message.pdu_format == 0xec and abstract_tpm:
+                continue
 
             # Multipacket data transfer message received
-            elif j1939_message.pgn == 0xeb00:
+            elif j1939_message.pdu_format == 0xeb:
                 message_manager.add_to_existing_conversation(j1939_message)
                 if abstract_tpm:
                     continue
 
             # UDS ISO-TP message received, first frame
-            elif j1939_message.pgn == 0xda00 and j1939_message.data[0:1] == '1':
+            elif j1939_message.pdu_format == 0xda and j1939_message.data[0:1] == '1':
                 iso_tp_message = _J1939ISOTPMessage(j1939_message)
                 message_manager.add_new_isotp_conversation(iso_tp_message)
                 if abstract_tpm:
                     continue
 
             # UDS ISO-TP message received, consecutive frame
-            elif j1939_message.pgn == 0xda00 and j1939_message.data[0:1] == '2':
+            elif j1939_message.pdu_format == 0xda and j1939_message.data[0:1] == '2':
                 message_manager.add_to_existing_isotp_conversation(j1939_message)
                 if abstract_tpm:
                     continue
 
             # UDS ISO-TP message received, flow control frame
-            elif j1939_message.pgn == 0xda00 and j1939_message.data[0:1] == '3':
+            elif j1939_message.pdu_format == 0xda and j1939_message.data[0:1] == '3':
                 if abstract_tpm:
                     continue
             return j1939_message
 
-    def send_message(self, message):
+    def send_message(self, message, tp_dst_addr=None):
+        """
+        Send a J1939Message with the defined device. If data is longer then 8 bytes long, automatically apply
+        the J1939 transport protocol.
+
+        :param message: J1939Message to send
+        :param tp_dst_addr: If message to send requires transport protocol and the PGN to send is in the Broadcast
+        range (0xF000-0xFFFF), then send a Request to Send (RTS) instead of a Broadcast Announce Message (BAM) to the
+        ECU with this address.
+        """
         # Get total number of bytes to send
         data_bytes = int(len(message.data) / 2)
 
         # Sending multipacket message - if number of bytes to send is more than 8 (ex: 1CECFF000820120003FFCAFE00)
         if data_bytes > 8:
-            # create transport protocol connection management can_id
-            can_id = j1939_fields_to_can_id(message.priority, message.reserved_bit, message.data_page_bit, 0xEC,
-                                            message.dst_addr, message.src_addr)
-
             # Change int to 4 character hex string
             num_bytes = "%04X" % data_bytes
-            num_packets = "%02X" % math.ceil(data_bytes / 7)
+            num_packets = math.ceil(data_bytes / 7)
 
-            pgn_str = hex(message.pgn)[2:].zfill(4)
-            if message.dst_addr == 0xFF:
-                # Send BAM message (ex: 20120003FFCAFE00)
-                control_message = ("20" + num_bytes[2:4] + num_bytes[0:2]
-                                   + num_packets + "FF" + pgn_str[2:4] + pgn_str[0:2] + "00")
-            else:
-                # Send RTS message
-                control_message = ("10" + num_bytes[2:4] + num_bytes[0:2]
-                                   + num_packets + "FF" + pgn_str[2:4] + pgn_str[0:2] + "00")
+            dst_pdu_format = message.pdu_format
+            dst_pdu_specific = message.pdu_specific
 
+            if message.pdu_format < 0xF0:
+                if message.pdu_specific == 0xFF:
+                    control_id = "20"  # destination-specific range, but destined for global address, do BAM
+                    dst_addr = 0xFF
+                else:
+                    control_id = "10"  # destination-specific range, do RTS
+                    dst_addr = message.pdu_specific
+            elif message.pdu_format >= 0xF0:
+                if tp_dst_addr is not None and tp_dst_addr != 0xFF:
+                    control_id = "10"  # broadcast range, but destined for a specific address, do RTS
+                    dst_addr = tp_dst_addr
+                else:
+                    control_id = "20"  # broadcast range, do BAM
+                    dst_addr = 0xFF
+
+            control_message = "{}{}{}{:02X}FF{:02X}{:02X}00".format(control_id, num_bytes[2:4], num_bytes[0:2],
+                                                                    num_packets, dst_pdu_specific, dst_pdu_format)
+
+            # create transport protocol connection management can_id
+            can_id = j1939_fields_to_can_id(message.priority, message.reserved_bit, message.data_page_bit, 0xEC,
+                                            dst_addr, message.src_addr)
             msg = can.Message(arbitration_id=can_id, is_extended_id=True, dlc=8, data=bytes.fromhex(control_message))
             with self.device.device_lock:
                 # Send BAM or RTS message
                 self.device.send(msg)
-            if message.dst_addr == 0xFF:
+            if dst_addr == 0xFF:
                 # Sleep 100ms before transmitting next message as stated in standard
                 time.sleep(0.1)
             else:
@@ -402,8 +507,8 @@ class J1939Interface:
 
             # create transport protocol data transfer can_id
             can_id = j1939_fields_to_can_id(message.priority, message.reserved_bit, message.data_page_bit, 0xEB,
-                                            message.dst_addr, message.src_addr)
-            for i in range(0, int(num_packets, 16)):
+                                            dst_addr, message.src_addr)
+            for i in range(0, num_packets):
                 # If a full 7 bytes is available
                 if (i * 7) < data_bytes - data_bytes % 7:
                     seven_bytes = message.data[i * 14:(i * 14) + 14]
@@ -420,9 +525,8 @@ class J1939Interface:
 
         # Sending non-multipacket message - if number of bytes to send is less than or equal to 8
         else:
-            # TODO: send less than 8 bytes without padding?
             msg = can.Message(arbitration_id=message.can_id, is_extended_id=True,
-                              data=bytes.fromhex(message.data + "FF" * (8 - data_bytes)))
+                              data=bytes.fromhex(message.data))
 
             with self.device.device_lock:
                 self.device.send(msg)
@@ -1015,9 +1119,17 @@ class J1939Interface:
 
 
 class MessageManagement:
-    def __init__(self):
+    def __init__(self, rts_response_addr=None):
+        """
+        :param rts_response_addr: if specified, respond to Request to Send transport protocol messages with a
+                                Clear to Send message containing this source address
+        """
         self._conversations = []
         self._lock_conversations = threading.RLock()
+        self.respond_rts = False
+        if rts_response_addr is not None:
+            self.respond_rts = True
+            self.rts_response_addr = rts_response_addr
 
         self._uds_conversations = []
         self._lock_uds_conversations = threading.RLock()
@@ -1059,8 +1171,8 @@ class MessageManagement:
         self._lock_conversations.acquire()
         for i in range(0, len(self._conversations)):
             # Correct conversation found
-            if self._conversations[i].completeMessage.src_addr == message.src_addr \
-                    and self._conversations[i].completeMessage.dst_addr == message.dst_addr:
+            if self._conversations[i].src_addr == message.src_addr \
+                    and self._conversations[i].dst_addr == message.pdu_specific:
                 self._conversations[i].received_packets += 1
                 # Received all the packets
                 if self._conversations[i].complete:
@@ -1125,11 +1237,9 @@ class MessageManagement:
                     del self._uds_conversations[i]
         self._lock_uds_conversations.release()
 
+
 class J1939Message:
     def __init__(self, can_id: int, data: str, total_bytes=None):
-        """
-
-        """
         if can_id < 0 or can_id > 0x1FFFFFFF:
             raise ValueError("invalid CAN ID")
         try:
@@ -1249,7 +1359,7 @@ class J1939Message:
         if (len(value) % 2 != 0 or
                 len(value) > 3570):
             raise ValueError('Length of data must be an even number and shorter than 1785 bytes')
-        self._data = value
+        self._data = value.upper()
 
     @property
     def total_bytes(self):
@@ -1264,9 +1374,12 @@ class J1939Message:
         Overrides default str method to return the parsed message
         example: "priority  pgn  src_addr --> dst_addr  [total_bytes]  data"
         """
-        return hex(self.can_id) + "  %02X %04X %02X --> %02X [%d]  %s" % (self.priority, self.pgn,
-                                                                            self.src_addr, self.dst_addr,
-                                                                            self.total_bytes, self.data.upper())
+        return "{:08X}    {:02X} {:04X} {:02X} --> {:02X} [{:04d}] {:<}".format(self.can_id, self.priority, self.pgn,
+                                                                                self.src_addr, self.dst_addr,
+                                                                                self.total_bytes, self.data.upper())
+        # return hex(self.can_id) + "  %02X %04X %02X --> %02X [%d]  %s" % (self.priority, self.pgn,
+        #                                                                  self.src_addr, self.dst_addr,
+        #                                                                  self.total_bytes, self.data.upper())
 
 
 class _J1939MultiPacketMessage:
@@ -1286,17 +1399,18 @@ class _J1939MultiPacketMessage:
         self.received_bytes = 0
 
         pdu_format = int(first_message.data[12:14], 16)
-        if pdu_format > 0xEF:
-            pdu_specific = int(first_message.data[10:12], 16)
-        else:
-            pdu_specific = first_message.dst_addr
+        pdu_specific = int(first_message.data[10:12], 16)
+
+        self.src_addr = first_message.src_addr
+        self.dst_addr = first_message.pdu_specific
 
         total_bytes = self.num_bytes
         data = ""
-        can_id = j1939_fields_to_can_id(first_message.priority, 0, 0, pdu_format, pdu_specific, first_message.src_addr)
+        can_id = j1939_fields_to_can_id(first_message.priority, first_message.reserved_bit, first_message.data_page_bit,
+                                        pdu_format, pdu_specific, first_message.src_addr)
 
         # Create new message with TP abstracted
-        self.completeMessage = J1939Message(can_id, data, total_bytes)
+        self.completeMessage = J1939Message(can_id=can_id, data=data, total_bytes=total_bytes)
         # Multipacket message not completed
         self.readyToSend = False
 
@@ -1310,7 +1424,7 @@ class _J1939MultiPacketMessage:
 
 
 class _J1939ISOTPMessage:
-    #TODO: fix and test this
+    # TODO: fix and test this
     """
     Creates a new ISO-TP (ISO 15765-2) message - for internal use only to deal with long UDS messages
 

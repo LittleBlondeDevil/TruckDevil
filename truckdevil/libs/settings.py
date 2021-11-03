@@ -89,6 +89,11 @@ class Setting:
         return self
 
     def __str__(self):
+        if type(self.value) is list:
+            str_vals = ", ".join([str(i) for i in self.value])
+            str_def_vals = ", ".join([str(i) for i in self.default_value])
+            return fill("{:<24} {:>12} (default: {:<5}) {:<}".format(self.name, str_vals, str_def_vals, self.description),
+                        width=120, subsequent_indent=" " * 55)
         return fill("{:<24} {:>12} (default: {:<5}) {:<}".format(
             self.name, self.value, self.default_value, self.description), width=120, subsequent_indent=" " * 55)
 
@@ -119,6 +124,14 @@ class SettingsManager:
         """
         if name in self.settings:
             self.settings[name].value = value
+
+    def unset(self, name: str):
+        """
+        Set a setting to it's default value. This will also show as not updated again.
+        :param name: str - name of the setting to unset
+        """
+        if name in self.settings:
+            self.settings[name]._value = None
 
     def __getattr__(self, name: str) -> Any:
         if name in self.settings:

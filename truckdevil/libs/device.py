@@ -89,7 +89,12 @@ class Device:
                     start_reading = False
                     self._acknowledged_flush = True
                 # Receive next character from M2
-                char = self._m2.read().decode("utf-8")
+                try:
+                    char = self._m2.read().decode("utf-8")
+                except UnicodeDecodeError:
+                    # Something went wrong
+                    # TODO: figure out why this error is occasionally raised - is the M2 sending an error frame??
+                    continue
                 if len(char) == 0:  # timeout occurred
                     self._m2.timeout = None
                     return None
