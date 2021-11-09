@@ -1,14 +1,12 @@
-import argparse
-import cmd
+import dill
 
 from j1939.j1939 import J1939Interface
+from libs.command import Command
 from libs.settings import SettingsManager, Setting
 
 
 class Reader:
-    def __init__(self, device):
-        self.devil = J1939Interface(device)
-
+    def __init__(self):
         self.sm = SettingsManager()
         sl = [
             Setting("read_time", 0).add_constraint("minimum", lambda x: 0 <= x)
@@ -56,13 +54,46 @@ class Reader:
             self.sm.add_setting(setting)
 
 
-class ReadCommands(cmd.Cmd):
+class ReadCommands(Command):
     intro = "Welcome to the Read Messages tool."
     prompt = "(truckdevil.read_messages) "
 
-    def __init__(self, argv, device):
+    def __init__(self, device):
         super().__init__()
-        self.reader = Reader(device)
+        self.devil = J1939Interface(device)
+        self.reader = Reader()
+
+    def do_save(self, arg):
+        """
+        save settings to file.
+
+        usage: save <file_name>
+        """
+        argv = arg.split()
+        if len(argv) != 1:
+            print("expected file name, see 'help save'")
+            return
+        file_name = argv[0]
+        try:
+            dill.dump(self.reader, open(file_name, "xb"))
+        except FileExistsError:
+            print("file already exists")
+            return
+        print("settings saved to {}".format(file_name))
+
+    def do_load(self, arg):
+        """
+        load settings from a file.
+
+        usage: load <file_name>
+        """
+        argv = arg.split()
+        if len(argv) != 1:
+            print("expected file name, see 'help save'")
+            return
+        file_name = argv[0]
+        self.reader = dill.load(open(file_name, "rb"))
+        print("settings loaded from {}".format(file_name))
 
     def do_settings(self, arg):
         """Show the settings and each setting value"""
@@ -156,8 +187,8 @@ class ReadCommands(cmd.Cmd):
         if self.reader.sm["log_name"].updated:
             file_name = self.reader.sm.log_name
         try:
-            self.reader.devil.print_messages(self.reader.sm.abstract_TPM, read_time, num_messages,
-                                             self.reader.sm.verbose, self.reader.sm.log_to_file, file_name, **filters)
+            self.devil.print_messages(self.reader.sm.abstract_TPM, read_time, num_messages,
+                                      self.reader.sm.verbose, self.reader.sm.log_to_file, file_name, **filters)
         except KeyboardInterrupt:
             return
         except FileExistsError:
@@ -169,5 +200,8 @@ class ReadCommands(cmd.Cmd):
 
 
 def main_mod(argv, device):
-    rcli = ReadCommands(argv, device)
-    rcli.cmdloop()
+    rcli = ReadCommands(device)
+    if len(argv) > 0:
+        rcli.run_commands(argv)
+    else:
+        rcli.cmdloop()

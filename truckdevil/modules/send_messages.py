@@ -1,21 +1,14 @@
-import argparse
-import cmd
-
 from j1939.j1939 import J1939Interface, J1939Message
+from libs.command import Command
 
 
-class Sender:
-    def __init__(self, device):
-        self.devil = J1939Interface(device)
-
-
-class SendCommands(cmd.Cmd):
+class SendCommands(Command):
     intro = "Welcome to the Send Messages tool."
     prompt = "(truckdevil.send_messages) "
 
-    def __init__(self, argv, device):
+    def __init__(self, device):
         super().__init__()
-        self.sender = Sender(device)
+        self.devil = J1939Interface(device)
 
     def do_send(self, arg):
         """
@@ -53,14 +46,17 @@ class SendCommands(cmd.Cmd):
             if argv[2] == '-v' or argv[2] == '-V':
                 print(str(message))
             elif argv[2] == '-vv' or argv[2] == '-VV':
-                print(self.sender.devil.get_decoded_message(message))
+                print(self.devil.get_decoded_message(message))
             else:
                 print("third argument invalid, see 'help send'")
             return
-        self.sender.devil.send_message(message)
+        self.devil.send_message(message)
         print("message sent.")
 
 
-def main_mod(argv, device=None):
-    scli = SendCommands(argv, device)
-    scli.cmdloop()
+def main_mod(argv, device):
+    scli = SendCommands(device)
+    if len(argv) > 0:
+        scli.run_commands(argv)
+    else:
+        scli.cmdloop()

@@ -147,3 +147,9 @@ class SettingsManager:
         for name in self.settings:
             ret_val += str(self.settings[name]) + "\n"
         return ret_val
+
+    def __getstate__(self):
+        return self.__dict__
+
+    def __setstate__(self, d):
+        self.__dict__.update(d)

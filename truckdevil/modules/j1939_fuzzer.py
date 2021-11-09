@@ -1,12 +1,13 @@
-import cmd
 import time
 import random
 import threading
 import copy
 import sys
 
-from j1939.j1939 import J1939Message, J1939Interface, j1939_fields_to_can_id
+import dill
 
+from j1939.j1939 import J1939Message, J1939Interface, j1939_fields_to_can_id
+from libs.command import Command
 from libs.settings import SettingsManager, Setting
 
 
@@ -188,6 +189,8 @@ class J1939Fuzzer:
         for setting in sl:
             self.sm.add_setting(setting)
 
+
+
     @property
     def targets(self):
         """
@@ -196,6 +199,13 @@ class J1939Fuzzer:
         :return: the targets list
         """
         return self._targets
+
+    @targets.setter
+    def targets(self, val: []):
+        """
+        Set the list of targets
+        """
+        self._targets = val
 
     def add_target(self, tgt):
         """
@@ -404,11 +414,11 @@ class J1939Fuzzer:
                     #data_len = random.randint(0, 1785)  # number of bytes to generate is random if pgn does not exist
 
             if option == 2:
-                long = random.randint(0, 1)
-                if long == 1:
-                    data_len = random.randint(9, 1785)  # number of bytes to generate
-                else:
-                    data_len = random.randint(0, 8)  # number of bytes to generate
+                #long = random.randint(0, 1)
+                #if long == 1:
+                #    data_len = random.randint(9, 1785)  # number of bytes to generate
+                #else:
+                data_len = random.randint(0, 8)  # number of bytes to generate
                 data = ''
                 for i in range(0, data_len):
                     data_byte = hex(random.randint(0, 255))[2:].zfill(2)
@@ -619,12 +629,12 @@ def progressbar(it, prefix="", size=60, file=sys.stdout):
     file.flush()
 
 
-class FuzzerCommands(cmd.Cmd):
+class FuzzerCommands(Command):
     # TODO: add save and load commands to save/load settings/test cases/baseline/targets
     intro = "Welcome to the truckdevil J1939 Fuzzer."
     prompt = "(truckdevil.j1939_fuzzer) "
 
-    def __init__(self, argv, device):
+    def __init__(self, device):
         super().__init__()
         self.fz = J1939Fuzzer(device)
 
@@ -635,22 +645,85 @@ class FuzzerCommands(cmd.Cmd):
 
     def do_save(self, arg):
         """
-        Save settings, targets, generated test cases, baseline, or all information.
+        Save settings, targets, generated test cases, baseline, or all information to a file.
 
-        usage: save <(all, settings, targets, test_cases, baseline)>
+        usage: save <(all, fuzz_settings, targets, test_cases, baseline)> <file_name>
 
         Verbs:
-            all         Saves settings, targets, test_cases, and baseline info
-            settings    Saves all current settings
-            targets     Saves list of targets
-            test_cases  Saves list of generated test cases
-            baseline    Saves the baseline information for all nodes
+            all             Saves settings, targets, test_cases, and baseline info
+            fuzz_settings   Saves all current settings
+            targets         Saves list of targets
+            test_cases      Saves list of generated test cases
+            baseline        Saves the baseline information for all nodes
         """
         argv = arg.split()
-        selection = argv[0]
-        if len(argv) == 1:
-            print("expected value, see 'help save'")
+        if len(argv) < 2:
+            print("expected selection and file name, see 'help save'")
             return
+        selection = argv[0]
+        file_name = argv[1]
+        try:
+            f = open(file_name, "xb")
+        except FileExistsError:
+            print("file already exists")
+            return
+        if selection == "all":
+            self.fz.devil = None
+            dill.dump(self.fz, f)
+            print("everything saved to {}".format(file_name))
+        elif selection == "fuzz_settings":
+            dill.dump(self.fz.sm, f)
+            print("settings saved to {}".format(file_name))
+        elif selection == "targets":
+            dill.dump(self.fz.targets, f)
+            print("targets saved to {}".format(file_name))
+        elif selection == "test_cases":
+            dill.dump(self.fz.test_cases, f)
+            print("test cases saved to {}".format(file_name))
+        elif selection == "baseline":
+            dill.dump([self.fz.sm.baseline_time, self.fz.baseline, self.fz.baseline_messages], f)
+            print("baseline data saved to {}".format(file_name))
+
+    def do_load(self, arg):
+        """
+        Load settings, targets, generated test cases, baseline, or all information from a file.
+
+        usage: load <(all, fuzz_settings, targets, test_cases, baseline)> <file_name>
+
+        Verbs:
+            all             Loads settings, targets, test_cases, and baseline info
+            fuzz_settings   Loads all current settings
+            targets         Loads list of targets
+            test_cases      Loads list of generated test cases
+            baseline        Loads the baseline information for all nodes
+        """
+        argv = arg.split()
+        if len(argv) < 2:
+            print("expected selection and file name, see 'help save'")
+            return
+        selection = argv[0]
+        file_name = argv[1]
+        f = open(file_name, "rb")
+        if selection == "all":
+            tmp_devil = self.fz.devil
+            self.fz = dill.load(f)
+            self.fz.devil = tmp_devil
+            print("everything loaded from {}".format(file_name))
+        elif selection == "fuzz_settings":
+            self.fz.sm = dill.load(f)
+            print("settings loaded from {}".format(file_name))
+        elif selection == "targets":
+            self.fz.targets = dill.load(f)
+            print("targets loaded from {}".format(file_name))
+        elif selection == "test_cases":
+            self.fz.test_cases = dill.load(f)
+            print("test cases loaded from {}".format(file_name))
+        elif selection == "baseline":
+            baseline_info = dill.load(f)
+            self.fz.sm.set("baseline_time", int(baseline_info[0]))
+            self.fz.baseline = baseline_info[1]
+            self.fz.baseline_messages = baseline_info[2]
+            print("baseline data loaded from {}".format(file_name))
 
     def do_set(self, arg):
         """
@@ -820,7 +893,7 @@ class FuzzerCommands(cmd.Cmd):
         try:
             for i in progressbar(range(self.fz.sm.num_messages), "Sending: ", 40):
                 m = self.fz.test_cases[i]
-                self.fz.devil.send_message(m)
+                self.fz.devil.send_message(m, tp_dst_addr=0)
                 with self.fz.lock_fuzzed_messages:
                     self.fz.fuzzed_messages.append(m)
                 time.sleep(self.fz.sm.message_frequency)
@@ -850,5 +923,8 @@ class FuzzerCommands(cmd.Cmd):
 
 
 def main_mod(argv, device):
-    fcli = FuzzerCommands(argv, device)
-    fcli.cmdloop()
+    fcli = FuzzerCommands(device)
+    if len(argv) > 0:
+        fcli.run_commands(argv)
+    else:
+        fcli.cmdloop()

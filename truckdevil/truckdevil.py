@@ -39,9 +39,22 @@ class FrameworkCommands(cmd.Cmd):
     def do_add_device(self, args):
         """
         Add a new hardware device. If one exists, replace it.
+
+        usage: add_device <interface> <channel> <can_baud> [serial_port]
+
+        Arguments:
+            interface       The CAN interface to use. e.g. m2 or one supported by python-can
+                            https://python-can.readthedocs.io/en/master/interfaces.html
+            channel         CAN channel to send/receive on. e.g. can0, can1, vcan0
+            can_baud        Baudrate on the CAN bus. Most common are 250000 and 500000. Use 0 for autobaud detection.
+            serial_port     Serial port that the M2 is connected to, if used. For example: COM7 or /dev/ttyX.
+
+        examples:
+        add_device m2 can0 250000 COM5
+        add_device socketcan vcan0 500000
         """
         argv = args.split()
-        if len(argv) == 0:
+        if len(argv) < 3:
             print("expected device details, see 'help add_device'")
             return
         interface = argv[0]
@@ -66,6 +79,8 @@ class FrameworkCommands(cmd.Cmd):
 
         usage: run_module <MODULE_NAME> [MODULE_ARGS]
 
+        example:
+        run_module read_messages
         """
         argv = args.split()
         if len(argv) == 0:
@@ -75,13 +90,12 @@ class FrameworkCommands(cmd.Cmd):
         if module_name in self.module_names:
             mod = importlib.import_module("modules.{}".format(module_name))
             mod.main_mod(argv[1:], self.device)
-        print("module not found, run 'list_modules'")
+        else:
+            print("module not found, run 'list_modules'")
 
 
 if __name__ == "__main__":
     fc = FrameworkCommands()
-    # TODO: have first arg be a filename, if exists - load settings/state info and pass to module, if doesn't exist,
-    #  create and pass to modules to save to. Keeps info like ECU information that's been collected, settings
     if len(sys.argv) > 1:
         if sys.argv[1] == "add_device" and "run_module" in sys.argv:
             module_index = sys.argv[1:].index("run_module")

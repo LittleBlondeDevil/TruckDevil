@@ -10,7 +10,7 @@ class Device:
         Defines a new hardware device
 
         :param device_type: either "m2" or "socketcan" (Default value = "m2").
-        :param serial_port: serial port that the M2 is connected to, if used. For example: COM7 or /dev/ttyX. 0 if not using M2."
+        :param serial_port: serial port that the M2 is connected to, if used. For example: COM7 or /dev/ttyX."
         :param channel: CAN channel to send/receive on. For example: can0, can1, or vcan0. (Default value = 'can0')
         :param can_baud: baudrate on the CAN bus. Most common are 250000 and 500000. Use 0 for autobaud detection. (Default value = 0)
         """
@@ -33,6 +33,7 @@ class Device:
             self.init_m2(self._can_baud, self._channel)
             self._m2used = True
         else:
+            # TODO: test other devices
             self._can_bus = interface.Bus(bustype=device_type, channel=channel, bitrate=can_baud)
             self._m2used = False
 

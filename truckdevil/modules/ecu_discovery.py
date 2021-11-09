@@ -1,9 +1,11 @@
-import cmd
 import copy
 import time
 
+import dill
+
 from j1939.j1939 import J1939Interface, J1939Message
-from libs.ecus import ECU
+from libs.command import Command
+from libs.ecu import ECU
 
 
 def input_to_int(in_str: str) -> int:
@@ -16,8 +18,7 @@ def input_to_int(in_str: str) -> int:
 
 
 class ECUDiscovery:
-    def __init__(self, device):
-        self.devil = J1939Interface(device)
+    def __init__(self):
         self._known_ecus = []
 
     @property
@@ -47,13 +48,47 @@ class ECUDiscovery:
         return ecu
 
 
-class DiscoveryCommands(cmd.Cmd):
+class DiscoveryCommands(Command):
     intro = "Welcome to the ECU Discovery tool."
     prompt = "(truckdevil.ecu_discovery) "
 
-    def __init__(self, argv, device):
+    def __init__(self, device):
         super().__init__()
-        self.ed = ECUDiscovery(device)
+        self.devil = J1939Interface(device)
+        self.ed = ECUDiscovery()
+
+
+    def do_save(self, arg):
+        """
+        save ECU information to file.
+
+        usage: save <file_name>
+        """
+        argv = arg.split()
+        if len(argv) != 1:
+            print("expected file name, see 'help save'")
+            return
+        file_name = argv[0]
+        try:
+            dill.dump(self.ed, open(file_name, "xb"))
+        except FileExistsError:
+            print("file already exists")
+            return
+        print("ECU information saved to {}".format(file_name))
+
+    def do_load(self, arg):
+        """
+        load ECU information from a file.
+
+        usage: load <file_name>
+        """
+        argv = arg.split()
+        if len(argv) != 1:
+            print("expected file name, see 'help save'")
+            return
+        file_name = argv[0]
+        self.ed = dill.load(open(file_name, "rb"))
+        print("ECU information loaded from {}".format(file_name))
 
     def do_view_ecus(self, arg):
         """
@@ -70,9 +105,9 @@ class DiscoveryCommands(cmd.Cmd):
         Passively scan the bus to find ECUs and store them in the list of discovered ecus.
         """
         print("scanning...")
-        self.ed.devil.start_data_collection()
+        self.devil.start_data_collection()
         time.sleep(10)
-        messages = self.ed.devil.stop_data_collection()
+        messages = self.devil.stop_data_collection()
         known_addresses = self.ed.get_all_addresses()
         for m in messages:
             ecu = ECU(m.src_addr)
@@ -89,13 +124,13 @@ class DiscoveryCommands(cmd.Cmd):
         Send Request for Address Claimed to discover ECUs and their NAME value
         """
         print("scanning...")
-        self.ed.devil.start_data_collection()
+        self.devil.start_data_collection()
         rqst = J1939Message(can_id=0x18EA0000, data="00EE00")
         for addr in range(0, 256):
             rqst.pdu_specific = addr
-            self.ed.devil.send_message(rqst)
+            self.devil.send_message(rqst)
         time.sleep(5)  # Give ecus 5 seconds to respond
-        messages = self.ed.devil.stop_data_collection()
+        messages = self.devil.stop_data_collection()
         known_addresses = self.ed.get_all_addresses()
         for m in messages:
             if m.pdu_format == 0xEE:
@@ -132,18 +167,18 @@ class DiscoveryCommands(cmd.Cmd):
                 continue
             break
         print("waiting for messages to stop transmitting...")
-        while self.ed.devil.read_one_message(timeout=0.5) is not None:
+        while self.devil.read_one_message(timeout=0.5) is not None:
             continue
-        self.ed.devil.start_data_collection()
+        self.devil.start_data_collection()
         while True:
             val = input("please power on the ECU, enter y when done or q to quit: ")
             if val == 'q' or val == 'quit':
-                self.ed.devil.stop_data_collection()
+                self.devil.stop_data_collection()
             if val != 'y' and val != 'yes':
                 print('input not recognized.')
                 continue
             break
-        messages = self.ed.devil.stop_data_collection()
+        messages = self.devil.stop_data_collection()
         reboot_message = None
         for m in messages:
             if m.src_addr == address:
@@ -170,7 +205,7 @@ class DiscoveryCommands(cmd.Cmd):
             print("address should be between 0-255.")
             return
         print("Scanning...")
-        self.ed.devil.start_data_collection()
+        self.devil.start_data_collection()
         rqst = J1939Message(can_id=0x18EA0000, data="")
         rqst.pdu_specific = address
         prop_range = []
@@ -179,9 +214,9 @@ class DiscoveryCommands(cmd.Cmd):
             prop_range.append("{0:02x}FF00".format(i))
         for data in prop_range:
             rqst.data = data
-            self.ed.devil.send_message(rqst)
+            self.devil.send_message(rqst)
         time.sleep(10)
-        messages = self.ed.devil.stop_data_collection()
+        messages = self.devil.stop_data_collection()
         e = self.ed.get_ecu_by_address(address)
         num_prop_messages = 0
         if e is not None:
@@ -219,7 +254,7 @@ class DiscoveryCommands(cmd.Cmd):
             print("address should be between 0-255.")
             return
         print("Scanning...")
-        self.ed.devil.start_data_collection()
+        self.devil.start_data_collection()
         uds_pdu_formats = [0xDA, 0xDB, 0xCD, 0xCE, 0xEF]
         tester_present_request = "023E00FFFFFFFF"
         msg = J1939Message(0x180000F9, tester_present_request)
@@ -235,10 +270,10 @@ class DiscoveryCommands(cmd.Cmd):
                         msg.reserved_bit = rb
                         messages_to_send.append(copy.copy(msg))
         for m in messages_to_send:
-            self.ed.devil.send_message(m)
+            self.devil.send_message(m)
             time.sleep(0.5)
         time.sleep(5)
-        messages = self.ed.devil.stop_data_collection()
+        messages = self.devil.stop_data_collection()
         uniq_responses = []
         for m in messages:
             if m.pdu_format in uds_pdu_formats:
@@ -276,12 +311,12 @@ class DiscoveryCommands(cmd.Cmd):
         print("requesting {} from {}...".format(pgn, address))
         pgn_data = "{0:06x}".format(pgn)
         pgn_data = pgn_data[4:6] + pgn_data[2:4] + pgn_data[0:2]
-        self.ed.devil.start_data_collection()
+        self.devil.start_data_collection()
         rqst = J1939Message(can_id=0x18EA0000, data=pgn_data)
         rqst.pdu_specific = address
-        self.ed.devil.send_message(rqst)
+        self.devil.send_message(rqst)
         time.sleep(5)
-        messages = self.ed.devil.stop_data_collection()
+        messages = self.devil.stop_data_collection()
         ack_msg = None
         found_msg = None
         for m in messages:
@@ -301,5 +336,8 @@ class DiscoveryCommands(cmd.Cmd):
 
 
 def main_mod(argv, device):
-    dcli = DiscoveryCommands(argv, device)
-    dcli.cmdloop()
+    dcli = DiscoveryCommands(device)
+    if len(argv) > 0:
+        dcli.run_commands(argv)
+    else:
+        dcli.cmdloop()
