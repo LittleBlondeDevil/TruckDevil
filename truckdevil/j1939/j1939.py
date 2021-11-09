@@ -1,4 +1,3 @@
-import serial
 import threading
 import time
 import math

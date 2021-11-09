@@ -3,7 +3,6 @@ import importlib
 import sys
 from pkgutil import iter_modules
 
-from j1939.j1939 import J1939Interface
 from libs.device import Device
 
 

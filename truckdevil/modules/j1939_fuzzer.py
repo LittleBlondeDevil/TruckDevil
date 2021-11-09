@@ -3,7 +3,6 @@ import random
 import threading
 import copy
 import sys
-
 import dill
 
 from j1939.j1939 import J1939Message, J1939Interface, j1939_fields_to_can_id

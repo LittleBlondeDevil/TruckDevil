@@ -1,6 +1,5 @@
 import copy
 import time
-
 import dill
 
 from j1939.j1939 import J1939Interface, J1939Message
@@ -336,6 +335,9 @@ class DiscoveryCommands(Command):
 
 
 def main_mod(argv, device):
+    if device is None:
+        print("add device first.")
+        return
     dcli = DiscoveryCommands(device)
     if len(argv) > 0:
         dcli.run_commands(argv)
