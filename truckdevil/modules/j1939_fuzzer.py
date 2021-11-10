@@ -625,7 +625,6 @@ def progressbar(it, prefix="", size=60, file=sys.stdout):
 
 
 class FuzzerCommands(Command):
-    # TODO: add save and load commands to save/load settings/test cases/baseline/targets
     intro = "Welcome to the truckdevil J1939 Fuzzer."
     prompt = "(truckdevil.j1939_fuzzer) "
 
@@ -889,7 +888,8 @@ class FuzzerCommands(Command):
         try:
             for i in progressbar(range(self.fz.sm.num_messages), "Sending: ", 40):
                 m = self.fz.test_cases[i]
-                self.fz.devil.send_message(m, tp_dst_addr=0)
+                # TODO: add option to add tp_dst_addr to send_message based on setting
+                self.fz.devil.send_message(m)
                 with self.fz.lock_fuzzed_messages:
                     self.fz.fuzzed_messages.append(m)
                 time.sleep(self.fz.sm.message_frequency)
