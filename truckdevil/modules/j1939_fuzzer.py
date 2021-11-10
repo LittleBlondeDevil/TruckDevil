@@ -406,18 +406,14 @@ class J1939Fuzzer:
                             data += data_byte
                     else:
                         raise KeyError
-                        #data_len = random.randint(0, 1785)  # number of bytes to generate is random if pgn exists but
-                        # the length is variable
                 except KeyError:
                     option = 2
-                    #data_len = random.randint(0, 1785)  # number of bytes to generate is random if pgn does not exist
-
             if option == 2:
-                #long = random.randint(0, 1)
-                #if long == 1:
-                #    data_len = random.randint(9, 1785)  # number of bytes to generate
-                #else:
-                data_len = random.randint(0, 8)  # number of bytes to generate
+                long = random.randint(0, 9)
+                if long == 9:
+                    data_len = random.randint(9, 1785)  # number of bytes to generate
+                else:
+                    data_len = random.randint(0, 8)  # number of bytes to generate
                 data = ''
                 for i in range(0, data_len):
                     data_byte = hex(random.randint(0, 255))[2:].zfill(2)
@@ -667,8 +663,9 @@ class FuzzerCommands(Command):
             print("file already exists")
             return
         if selection == "all":
-            self.fz.devil = None
-            dill.dump(self.fz, f)
+            fz = copy.copy(self.fz)
+            fz.devil = None
+            dill.dump(fz, f)
             print("everything saved to {}".format(file_name))
         elif selection == "fuzz_settings":
             dill.dump(self.fz.sm, f)
