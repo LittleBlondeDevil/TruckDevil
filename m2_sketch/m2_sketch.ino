@@ -74,7 +74,7 @@ CAN_FRAME passFrameFromSerial() {
         return outgoing;
       }
       c = Serial.read();
-      if (c == end_delim && ndx == 26) {
+      if (c == end_delim && ndx > 10) {
         message[26] = '\0';
         memcpy(tempbuf, &message[0], 8); //pull the 8 digit id out (18EF0B00)
         tempbuf[8] = '\0';
@@ -84,7 +84,8 @@ CAN_FRAME passFrameFromSerial() {
         tempbuf[2] = '\0';
         outgoing.length = strtol(tempbuf, 0, 16);
 
-        for (int count = 0; count < 8; count++) {
+        
+        for (int count = 0; count < (ndx-10)/2; count++) {
           memcpy(tempbuf, &message[10 + (count*2)], 2); //pull one byte out at a time of data)
           tempbuf[2] = '\0';
           outgoing.data.byte[count] = strtol(tempbuf, 0, 16);
