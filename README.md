@@ -19,10 +19,9 @@ Additionally, an OBD-II to J1939 deutsch 9 pin adapter or splitter could be util
 Additional software is required to flash the m2_sketch firmware to the M2, if used (see Installation).
 
 ## Installation
-- Install from pip:
-    ```
-    > python -m pip install truckdevil
-    ```
+```
+> git clone https://github.com/LittleBlondeDevil/TruckDevil.git
+```
 ### M2 (if used)
 
 - Follow the first 3 steps included in the M2 [Arduino IDE Quick Start](https://docs.macchina.cc/m2-docs/arduino) guide
