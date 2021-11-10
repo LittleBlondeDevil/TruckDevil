@@ -16,7 +16,7 @@ Additionally, an OBD-II to J1939 deutsch 9 pin adapter or splitter could be util
 
 [Python 3](https://www.python.org/downloads/) is required.
 
-Additional software is required to flash the truckdevil_sketch firmware to the M2, if used (see Installation).
+Additional software is required to flash the m2_sketch firmware to the M2, if used (see Installation).
 
 ## Installation
 - Install from pip:
@@ -35,7 +35,7 @@ Additional software is required to flash the truckdevil_sketch firmware to the M
     ```
     Sketch > Include Library > Add .Zip Library...
     ```
-- Upload truckDevil_sketch.ino to the M2
+- Upload m2_sketch.ino to the M2
     - Ensure M2 is plugged in over USB and that it's selected as the active board. 
     ```
     Tools > Board: "[...]" > Arduino Due (Native USB Port)
@@ -44,7 +44,7 @@ Additional software is required to flash the truckdevil_sketch firmware to the M
     ```
     Tools > Port
     ```
-    - Open the truckDevil_sketch.ino file and upload it to the M2.
+    - Open the m2_sketch.ino file and upload it to the M2.
     ```
     Sketch > Upload
     ```
@@ -131,10 +131,3 @@ def main_mod(argv, device)
 
 Python docs are available in the j1939.py file. Existing modules provide example usage.
 
-## Acknowledgments
-
-Shoutout to collin80 for the Arduino CAN libraries!
-
-Thank you Jeremy Daily for providing truck ECUs and other useful hardware. Additionally, the dataBitDecoding.json file was created and modified from resources contained within Jeremy's [TU-RP1210](https://github.com/Heavy-Vehicle-Networking-At-U-Tulsa/TU-RP1210) repo.
-
-I would also like to make mention of another great tool available for CAN experimentations, [CanCat](https://github.com/atlas0fd00m/CanCat), developed by researchers at GRIMM.
