@@ -7,8 +7,8 @@ from libs.device import Device
 
 
 class FrameworkCommands(cmd.Cmd):
-    intro = "Welcome to the truckdevil framework"
-    prompt = '(truckdevil)'
+    intro = "Welcome to the truckdevil framework. Type 'help' for a list of commands."
+    prompt = '(truckdevil) '
 
     def __init__(self):
         super().__init__()
