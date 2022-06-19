@@ -91,7 +91,16 @@ class FrameworkCommands(cmd.Cmd):
             mod.main_mod(argv[1:], self.device)
         else:
             print("module not found, run 'list_modules'")
-
+            
+    def complete_run_module(self, text, line, begidx, endidx):
+        if not text:
+            completions = self.module_names[:]
+        else:
+            completions = [ f
+                            for f in self.module_names
+                            if f.startswith(text)
+                            ]
+        return completions
 
 if __name__ == "__main__":
     fc = FrameworkCommands()
