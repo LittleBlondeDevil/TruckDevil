@@ -53,6 +53,12 @@ class SendCommands(Command):
         self.devil.send_message(message)
         print("message sent.")
 
+    @staticmethod
+    def do_back(self, arg=None):
+        """
+        Return to the main menu
+        """
+        return True
 
 def main_mod(argv, device):
     scli = SendCommands(device)
