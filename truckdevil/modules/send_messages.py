@@ -43,9 +43,10 @@ class SendCommands(Command):
 
         message = J1939Message(can_id, data)
         if len(argv) == 3:
-            if argv[2] == '-v' or argv[2] == '-V':
+            verbose = argv[2][1:].lower()
+            if verbose == 'v':
                 print(str(message))
-            elif argv[2] == '-vv' or argv[2] == '-VV':
+            elif verbose == 'vv':
                 print(self.devil.get_decoded_message(message))
             else:
                 print("third argument invalid, see 'help send'")

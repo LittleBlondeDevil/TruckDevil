@@ -110,7 +110,7 @@ class J1939Interface:
         :param verbose: whether or not to print the message in decoded form (Default value = False)
         :param log_to_file: whether or not to log the messages to a file (Default value = False)
         :param file_name: if log_to_file is True, this will be the name of the log file (Default value =
-                        'log_[time].txt'
+                        'log_[time].txt')
         :param filters:
             See below
         :Keyword Arguments:
@@ -295,33 +295,33 @@ class J1939Interface:
     def save_data_collected(self, messages, file_name=None, verbose=False):
         # TODO: fix save/load functions
         """
-        Save the collected messages to a file
+        Save the collected messages to a log file
 
-        :param messages: the collected messages outputted from stopDataCollection
-        :param file_name: the name of the file to save the data to. If not specified, defaults to: "m2_collected_data_[time]"
+        :param messages: list of J1939Message objects
+        :param file_name: the name of the file to save the data to. (Default value = 'log_[time].txt')
         :param verbose: whether or not to save the message in decoded form (Default value = False)
         """
         # If given messages list is empty
         if len(messages) == 0:
             raise Exception('messages list is empty')
         if file_name is None:
-            file_name = 'm2_collected_data_' + str(int(time.time()))
+            file_name = 'log_{}.txt'.format(str(int(time.time())))
         f = open(file_name, "x")
-        f.write("""Priority    PGN    Source --> Destination    [Num Bytes]    data""" + '\n')
+        f.write("""CAN_ID   Priority    PGN    Source --> Destination    [Num Bytes]    data""" + '\n')
         for m in messages:
             if not verbose:
-                f.write(str(m) + '\n')
+                f.write("{}\n".format(m))
             else:
-                f.write(self.get_decoded_message(m) + '\n')
+                f.write("{}\n".format(self.get_decoded_message(m)))
         f.close()
 
     def import_data_collected(self, file_name):
         # TODO: fix save/load functions
         """
-        Converts log file to list of J1939_Message objects
+        Converts log file to list of J1939Message objects
 
         :param file_name: the name of the file where the data is saved
-        :returns: list of J1939_Message objects from log file
+        :returns: list of J1939Message objects from log file
         """
         messages = []
         if os.path.exists(file_name):
@@ -332,13 +332,10 @@ class J1939Interface:
                         first_line = False
                     else:
                         parts = line.split()
-                        if len(parts) == 7 and parts[3] == '-->' and '[' in line:
+                        if len(parts) == 8 and parts[4] == '-->' and '[' in line:
                             message = J1939Message(
-                                priority=int(parts[0]),
-                                pgn=int(parts[1], 16),
-                                dst_addr=int(parts[4], 16),
-                                src_addr=int(parts[2], 16),
-                                data=parts[6]
+                                can_id=int(parts[0], 16),
+                                data=parts[7]
                             )
                             messages.append(message)
                 return messages
@@ -432,20 +429,20 @@ class J1939Interface:
                     continue
 
             # UDS ISO-TP message received, first frame
-            elif j1939_message.pdu_format == 0xda and j1939_message.data[0:1] == '1':
+            elif (j1939_message.pdu_format == 0xda or j1939_message.pdu_format == 0xdb) and j1939_message.data[0:1] == '1':
                 iso_tp_message = _J1939ISOTPMessage(j1939_message)
                 message_manager.add_new_isotp_conversation(iso_tp_message)
                 if abstract_tpm:
                     continue
 
             # UDS ISO-TP message received, consecutive frame
-            elif j1939_message.pdu_format == 0xda and j1939_message.data[0:1] == '2':
+            elif (j1939_message.pdu_format == 0xda or j1939_message.pdu_format == 0xdb) and j1939_message.data[0:1] == '2':
                 message_manager.add_to_existing_isotp_conversation(j1939_message)
                 if abstract_tpm:
                     continue
 
             # UDS ISO-TP message received, flow control frame
-            elif j1939_message.pdu_format == 0xda and j1939_message.data[0:1] == '3':
+            elif (j1939_message.pdu_format == 0xda or j1939_message.pdu_format == 0xdb) and j1939_message.data[0:1] == '3':
                 if abstract_tpm:
                     continue
             return j1939_message
@@ -1427,24 +1424,28 @@ class _J1939ISOTPMessage:
     """
     Creates a new ISO-TP (ISO 15765-2) message - for internal use only to deal with long UDS messages
 
-    :param first_message: a J1939_Message object to initialize the ISO-TP message
+    :param first_message: a J1939Message object to initialize the ISO-TP message
     """
 
     def __init__(self, first_message=None):
         if (isinstance(first_message, J1939Message) == False or
                 first_message is None):
-            raise Exception('Must include an instance of a J1939_Message')
+            raise Exception('Must include an instance of a J1939Message')
 
         # Between 8 and 4095 bytes
         self.num_bytes = int(first_message.data[1:4], 16)
+
+        """can_id = j1939_fields_to_can_id(first_message.priority, first_message.reserved_bit, first_message.data_page_bit,
+                                        first_message.pdu_format, pdu_specific, first_message.src_addr)
 
         priority = first_message.priority
         pgn = 0xDA00
         dst_addr = first_message.dst_addr
         src_addr = first_message.src_addr
+        """
         # Add 40 for truckdevil decoder to know this is a created ISO-TP
         # message, not a properly formatted one
-        data = '40' + first_message.data[4:]
+        data = "40{}".format(first_message.data[4:])
 
         self.received_bytes = (len(data) - 2) / 2
 
@@ -1452,9 +1453,8 @@ class _J1939ISOTPMessage:
 
         # Create new message
         self.completeMessage = J1939Message(
-            priority, pgn,
-            dst_addr, src_addr,
-            data
+            can_id=first_message.can_id,
+            data=data
         )
 
         # ISO TP message not ready to send
