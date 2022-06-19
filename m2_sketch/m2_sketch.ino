@@ -1,7 +1,16 @@
 #include <due_can.h>
 
+/* Configuration Parameters */
 #define Serial SerialUSB
+#define LED_TIMEOUT 1000
+#define RX_LED DS5
+#define TX_LED DS6
+#define ON LOW
+#define OFF HIGH
 
+/* Global Variables */
+int RxIndication = 0;
+int TxIndication = 0;
 int filter;
 char channel[5];
 
@@ -21,6 +30,12 @@ void initialize_can() {
       Can0.setRXFilter(filter, 0, 0, true);
     }
   }
+
+  /* Configure the RX/TX LEDs */
+  pinMode(RX_LED, OUTPUT);
+  pinMode(TX_LED, OUTPUT);
+  digitalWrite(RX_LED, OFF);
+  digitalWrite(TX_LED, OFF);
 }
 
 void setup() {
@@ -84,7 +99,7 @@ CAN_FRAME passFrameFromSerial() {
         tempbuf[2] = '\0';
         outgoing.length = strtol(tempbuf, 0, 16);
 
-        
+
         for (int count = 0; count < (ndx-10)/2; count++) {
           memcpy(tempbuf, &message[10 + (count*2)], 2); //pull one byte out at a time of data)
           tempbuf[2] = '\0';
@@ -115,6 +130,10 @@ void loop() {
   if (strcmp(channel,"can1") == 0 && Can1.available() > 0) {
     Can1.read(incoming);
     passFrameToSerial(incoming);
+
+    /* Set Rx indication */
+    RxIndication = LED_TIMEOUT;
+    digitalWrite(RX_LED, ON);
   } else if (strcmp(channel,"can1") != 0 && Can0.available() > 0) {
     Can0.read(incoming);
     passFrameToSerial(incoming);
@@ -123,16 +142,37 @@ void loop() {
     RxIndication = LED_TIMEOUT;
     digitalWrite(RX_LED, ON);
   }
-  
+
   //if there's a message from Serial, pass it to M2 CAN transceiver
   if (Serial.available() > 0) {
     outgoing = passFrameFromSerial();
     if (outgoing.id != -1) { //no errors occurred
       if (strcmp(channel,"can1") == 0) {
         Can1.sendFrame(outgoing);
+        /* Set Tx indication */
+        TxIndication = LED_TIMEOUT;
+        digitalWrite(TX_LED, ON);
       } else {
         Can0.sendFrame(outgoing);
+        /* Set Tx indication */
+        TxIndication = LED_TIMEOUT;
+        digitalWrite(TX_LED, ON);
       }
+    }
+  }
+
+  /* Check for Tx indication timeout */
+  if(TxIndication > 0){
+    TxIndication--;
+    if(TxIndication == 0){
+      digitalWrite(TX_LED, OFF);
+    }
+  }
+  /* Check for Rx indication timeout */
+  if(RxIndication > 0){
+    RxIndication--;
+    if(RxIndication == 0){
+      digitalWrite(RX_LED, OFF);
     }
   }
 }
