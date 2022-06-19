@@ -91,6 +91,12 @@ class FrameworkCommands(cmd.Cmd):
             mod.main_mod(argv[1:], self.device)
         else:
             print("module not found, run 'list_modules'")
+
+    def do_quit(self, args):
+        """
+        Quit TruckDevil
+        """
+        sys.exit("Exiting TruckDevil")
             
     def complete_run_module(self, text, line, begidx, endidx):
         if not text:
@@ -113,5 +119,5 @@ if __name__ == "__main__":
             fc.onecmd(' '.join(module_args))
         else:
             fc.onecmd(' '.join(sys.argv[1:]))
-    else:
-        fc.cmdloop()
+    # else:
+    fc.cmdloop()
