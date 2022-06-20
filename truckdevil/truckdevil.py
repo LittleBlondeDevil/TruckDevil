@@ -125,6 +125,16 @@ class FrameworkCommands(cmd.Cmd):
                             ]
         return completions
 
+    def complete_use(self, text, line, begidx, endidx):
+        if not text:
+            completions = self.module_names[:]
+        else:
+            completions = [ f
+                            for f in self.module_names
+                            if f.startswith(text)
+                            ]
+        return completions
+
 if __name__ == "__main__":
     fc = FrameworkCommands()
     if len(sys.argv) > 1:
