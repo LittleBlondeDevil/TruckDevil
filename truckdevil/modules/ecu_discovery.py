@@ -333,6 +333,12 @@ class DiscoveryCommands(Command):
         else:
             print(found_msg)
 
+    @staticmethod
+    def do_back(self, arg=None):
+        """
+        Return to the main menu
+        """
+        return True
 
 def main_mod(argv, device):
     if device is None:

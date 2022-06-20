@@ -7,8 +7,8 @@ from libs.device import Device
 
 
 class FrameworkCommands(cmd.Cmd):
-    intro = "Welcome to the truckdevil framework"
-    prompt = '(truckdevil)'
+    intro = "Welcome to the truckdevil framework. Type 'help or ?' for a list of commands."
+    prompt = '(truckdevil) '
 
     def __init__(self):
         super().__init__()
@@ -55,7 +55,8 @@ class FrameworkCommands(cmd.Cmd):
         """
         argv = args.split()
         if len(argv) < 3:
-            print("expected device details, see 'help add_device'")
+            print("Error: expected device details")
+            self.do_help("add_device")
             return
         interface = argv[0]
         channel = argv[1]
@@ -72,6 +73,12 @@ class FrameworkCommands(cmd.Cmd):
         for name in self.module_names:
             print(name)
 
+    def do_ls(self, args):
+        """
+        alias 'ls' to 'list_modules'
+        """
+        self.do_list_modules(args) 
+
     def do_run_module(self, args):
         """
         Run a module from the 'modules' directory that contains
@@ -84,14 +91,29 @@ class FrameworkCommands(cmd.Cmd):
         """
         argv = args.split()
         if len(argv) == 0:
-            print("expected module name, see 'help run_module'")
+            print("Error: expected module name")
+            self.do_help("run_module")
             return
         module_name = argv[0]
         if module_name in self.module_names:
             mod = importlib.import_module("modules.{}".format(module_name))
             mod.main_mod(argv[1:], self.device)
         else:
-            print("module not found, run 'list_modules'")
+            print("Error: module not found")
+            self.do_help("run_module")
+
+
+    def do_use(self, args):
+        """
+        alias 'use' to 'run_module'
+        """
+        self.do_run_module(args) 
+
+    def do_quit(self, args):
+        """
+        Quit TruckDevil
+        """
+        sys.exit("Exiting TruckDevil")
             
     def complete_run_module(self, text, line, begidx, endidx):
         if not text:
@@ -112,6 +134,10 @@ if __name__ == "__main__":
             module_args = sys.argv[module_index + 1:]
             fc.onecmd(' '.join(device_args))
             fc.onecmd(' '.join(module_args))
+        elif sys.argv[1] == "add_device" and not "run_module" in sys.argv:
+            fc.onecmd(' '.join(sys.argv[1:6]))
+            fc.onecmd(' '.join(sys.argv[6:]))
+            fc.cmdloop()
         else:
             fc.onecmd(' '.join(sys.argv[1:]))
     else:

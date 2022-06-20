@@ -195,6 +195,13 @@ class ReadCommands(Command):
             print("Log file already exists.")
             return
 
+    @staticmethod
+    def do_back(self, arg=None):
+        """
+        Return to the main menu
+        """
+        return True
+
     # TODO: add feature for viewing messages that have changed. Instead of scrolling, show a count and the bytes
     # that changed in the data between receives
 
