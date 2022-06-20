@@ -118,7 +118,11 @@ if __name__ == "__main__":
             module_args = sys.argv[module_index + 1:]
             fc.onecmd(' '.join(device_args))
             fc.onecmd(' '.join(module_args))
+        elif sys.argv[1] == "add_device" and not "run_module" in sys.argv:
+            fc.onecmd(' '.join(sys.argv[1:6]))
+            fc.onecmd(' '.join(sys.argv[6:]))
+            fc.cmdloop()
         else:
             fc.onecmd(' '.join(sys.argv[1:]))
-    # else:
-    fc.cmdloop()
+    else:
+        fc.cmdloop()
