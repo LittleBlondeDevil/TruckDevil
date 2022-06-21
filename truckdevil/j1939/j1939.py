@@ -596,7 +596,17 @@ class J1939Interface:
                                 .zfill(int((len(message.data) / 2) * 8))
                             bin_data = bin_data_total[start_bit:end_bit]
                             extracted_data = int(bin_data, 2)
-                            # Swap endianness if greater then 1 byte
+                            # Swap endianness if greater then 1
+                            # 558 = 2 559 = 2 1437 = 1 2970 = 3 91 = 101.6 92 = 0 974 = 102
+                            # truckdevil.py run_module send_messages send 0xCF00300 DAFE00FFFF0C007D -vv
+                            if total_bits < 8:
+                                dbyte = int(message.data[:2], 16)
+                                # print(f'dbyte: {dbyte:d}')
+                                mask = pow(2, total_bits) - 1
+                                # print(f'mask: {mask:d}')
+                                extracted_data = (dbyte >> start_bit) & mask
+                                # print(f'extracted_data: {extracted_data:d}')
+
                             if 8 < total_bits <= 16:  # (2 bytes)
                                 extracted_data = int.from_bytes(extracted_data.to_bytes(2, byteorder='little'),
                                                                 byteorder='big', signed=False)

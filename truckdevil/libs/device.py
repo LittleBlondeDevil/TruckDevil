@@ -1,3 +1,4 @@
+import can
 from can import interface, Message
 import serial
 import time
@@ -141,4 +142,16 @@ class Device:
             data = ''.join('{:02x}'.format(x) for x in msg.data)
             self.m2.write("${}{}{}*".format(can_id, dlc, data).encode('utf-8'))
         else:
-            self._can_bus.send(msg)
+            sleeptime = 0.0
+            while True:
+                try:
+                    self._can_bus.send(msg)
+                    time.sleep(sleeptime)
+                except can.CanOperationError as e:
+                    if sleeptime == 0.0:
+                        sleeptime = 0.001
+                    else:
+                        sleeptime = sleeptime * 10
+                    print(f'error: {e:s} backing off delay to {sleeptime:d}')
+                finally:
+                    return
