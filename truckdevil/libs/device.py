@@ -152,6 +152,9 @@ class Device:
                         sleeptime = 0.001
                     else:
                         sleeptime = sleeptime * 10
-                    print(f'error: {e:s} backing off delay to {sleeptime:d}')
+                    print(f'error: {e} backing off delay to {sleeptime:d}')
+                except Exception as e:
+                    print(f'error: {e} aborting.')
+                    return
                 finally:
                     return
