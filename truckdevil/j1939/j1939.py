@@ -175,9 +175,17 @@ class J1939Interface:
                 if log_to_file:
                     log_file.write(str(j1939_message) + '\n')
             else:
-                print(self.get_decoded_message(j1939_message))
+                try:
+                    print(self.get_decoded_message(j1939_message))
+                except Exception as e:
+                    print(f'error decoding message: {e}')
+
                 if log_to_file:
-                    log_file.write(self.get_decoded_message(j1939_message) + '\n')
+                    try:
+                        log_file.write(self.get_decoded_message(j1939_message) + '\n')
+                    except Exception as e:
+                        log_file.write(f'error decoding message: {e}')
+
             messages_printed = messages_printed + 1
         # Close the log file before exiting
         if log_to_file:
