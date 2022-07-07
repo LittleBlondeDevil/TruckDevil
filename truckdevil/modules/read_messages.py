@@ -27,6 +27,9 @@ class Reader:
             Setting("verbose", False).add_constraint("boolean", lambda x: type(x) is bool)
                 .add_description("Display the messages in decoded form, if applicable."),
 
+            Setting("candump", False).add_constraint("boolean", lambda x: type(x) is bool)
+                .add_description("Display the messages in candump format"),
+
             Setting("filter_can_id", [0]).add_constraint("list_of_ints", lambda x: all(isinstance(i, int) for i in x))
                 .add_description("Only read messages containing one of these CAN IDs."),
 
@@ -188,7 +191,8 @@ class ReadCommands(Command):
             file_name = self.reader.sm.log_name
         try:
             self.devil.print_messages(self.reader.sm.abstract_TPM, read_time, num_messages,
-                                      self.reader.sm.verbose, self.reader.sm.log_to_file, file_name, **filters)
+                                      self.reader.sm.verbose, self.reader.sm.log_to_file, file_name, 
+                                      self.reader.sm.candump, **filters)
         except KeyboardInterrupt:
             return
         except FileExistsError:

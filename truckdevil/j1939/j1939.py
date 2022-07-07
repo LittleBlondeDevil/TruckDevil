@@ -96,7 +96,7 @@ class J1939Interface:
         self._print_messages_time_done = True
 
     def print_messages(self, abstract_tpm=True, read_time=None, num_messages=None, verbose=False, log_to_file=False,
-                       file_name=None, **filters):
+                       file_name=None, candump=False, **filters):
         """
         Read and print messages from device based on optional filters provided.
         Each filter is a list, messages are only read if it satisfies every filter condition.
@@ -111,6 +111,7 @@ class J1939Interface:
         :param log_to_file: whether or not to log the messages to a file (Default value = False)
         :param file_name: if log_to_file is True, this will be the name of the log file (Default value =
                         'log_[time].txt')
+        :param timestamp: whether to include a timestamp when printing messages (Default value = True)
         :param filters:
             See below
         :Keyword Arguments:
@@ -171,9 +172,15 @@ class J1939Interface:
                 continue
             # Print/log the message
             if not verbose:
-                print(j1939_message)
-                if log_to_file:
-                    log_file.write(str(j1939_message) + '\n')
+                if not candump:
+                    print(j1939_message)
+                    if log_to_file:
+                        log_file.write(str(j1939_message) + '\n')
+                else:
+                    if j1939_message.total_bytes < 9: 
+                        print(self.get_candump(j1939_message))
+                        if log_to_file:
+                            log_file.write(self.get_candump(j1939_message) + '\n')
             else:
                 try:
                     print(self.get_decoded_message(j1939_message))
@@ -400,11 +407,13 @@ class J1939Interface:
             # Look for full multipacket message to return first
             j1939_message = message_manager.find_full_multipacket_message()
             if j1939_message is not None:
+                j1939_message.timestamp = time.time()
                 return j1939_message
 
             # Look for full ISO-TP message to return next
             j1939_message = message_manager.find_full_isotp_message()
             if j1939_message is not None:
+                j1939_message.timestamp = time.time()
                 return j1939_message
 
             # Next read from device
@@ -413,6 +422,7 @@ class J1939Interface:
                 return None  # timeout occurred
             data = ''.join('{:02x}'.format(x) for x in can_msg.data)
             j1939_message = J1939Message(can_msg.arbitration_id, data)
+            j1939_message.timestamp = time.time()
 
             # Multipacket message received, broadcasted or peer-to-peer request to send
             if j1939_message.pdu_format == 0xec and (j1939_message.data[0:2] == "20" or j1939_message.data[0:2] == "10"):
@@ -534,6 +544,18 @@ class J1939Interface:
 
             with self.device.device_lock:
                 self.device.send(msg)
+
+    def get_candump(self, message=None):
+        """
+        Decodes a J1939_Message object into human-readable string
+
+        :param message: J1939_Message object to be decoded
+        :returns: the decoded message as a string
+        """
+        if isinstance(message, J1939Message) is False or message is None:
+            raise Exception('Must include an instance of a J1939_Message')
+        return "({:6f}) {} {:08X}#{:<}".format(message.timestamp, self.device._channel, message.can_id, message.data.upper())
+
 
     def get_decoded_message(self, message=None):
         """
@@ -1269,6 +1291,7 @@ class J1939Message:
         self._can_id = can_id
         self._data = data
         self._total_bytes = int(total_bytes)
+        self._timestamp = 0
 
     @property
     def can_id(self):
@@ -1279,6 +1302,16 @@ class J1939Message:
         if value < 0 or value > 0x1FFFFFFF:
             raise ValueError("invalid CAN ID")
         self._can_id = value
+
+    @property
+    def timestamp(self):
+        return self._timestamp
+
+    @timestamp.setter
+    def timestamp(self, value):
+        if value < 0:
+            raise ValueError("timestamp must be greater than 0")
+        self._timestamp = value
 
     @property
     def priority(self):
@@ -1387,10 +1420,15 @@ class J1939Message:
         """
         Overrides default str method to return the parsed message
         example: "priority  pgn  src_addr --> dst_addr  [total_bytes]  data"
-        """
         return "{:08X}    {:02X} {:04X} {:02X} --> {:02X} [{:04d}] {:<}".format(self.can_id, self.priority, self.pgn,
                                                                                 self.src_addr, self.dst_addr,
                                                                                 self.total_bytes, self.data.upper())
+
+        """
+        return "({:6f}) {:08X}    {:02X} {:04X} {:02X} --> {:02X} [{:04d}] {:<}".format(self.timestamp, self.can_id, self.priority, self.pgn,
+                                                                                self.src_addr, self.dst_addr,
+                                                                                self.total_bytes, self.data.upper())
+
         # return hex(self.can_id) + "  %02X %04X %02X --> %02X [%d]  %s" % (self.priority, self.pgn,
         #                                                                  self.src_addr, self.dst_addr,
         #                                                                  self.total_bytes, self.data.upper())

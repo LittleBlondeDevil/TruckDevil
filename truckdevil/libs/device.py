@@ -132,6 +132,8 @@ class Device:
                     start_reading = False
         else:
             msg = self._can_bus.recv(timeout=timeout)
+            # Phil Debugging
+            print("({:.6f})".format(msg.timestamp),end=' ')
             return msg
 
     def send(self, msg: Message):
