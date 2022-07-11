@@ -422,7 +422,7 @@ class J1939Interface:
                 return None  # timeout occurred
             data = ''.join('{:02x}'.format(x) for x in can_msg.data)
             j1939_message = J1939Message(can_msg.arbitration_id, data)
-            j1939_message.timestamp = time.time()
+            j1939_message.timestamp = can_msg.timestamp 
 
             # Multipacket message received, broadcasted or peer-to-peer request to send
             if j1939_message.pdu_format == 0xec and (j1939_message.data[0:2] == "20" or j1939_message.data[0:2] == "10"):
@@ -1425,9 +1425,14 @@ class J1939Message:
                                                                                 self.total_bytes, self.data.upper())
 
         """
-        return "({:6f}) {:08X}    {:02X} {:04X} {:02X} --> {:02X} [{:04d}] {:<}".format(self.timestamp, self.can_id, self.priority, self.pgn,
-                                                                                self.src_addr, self.dst_addr,
-                                                                                self.total_bytes, self.data.upper())
+        return "({:6f}) {:08X}    {:02X} {:04X} {:02X} --> {:02X} [{:04d}] {:<}".format(self.timestamp, 
+                                                                                     self.can_id, 
+                                                                                     self.priority, 
+                                                                                     self.pgn,
+                                                                                     self.src_addr, 
+                                                                                     self.dst_addr,
+                                                                                     self.total_bytes, 
+                                                                                     self.data.upper())
 
         # return hex(self.can_id) + "  %02X %04X %02X --> %02X [%d]  %s" % (self.priority, self.pgn,
         #                                                                  self.src_addr, self.dst_addr,
