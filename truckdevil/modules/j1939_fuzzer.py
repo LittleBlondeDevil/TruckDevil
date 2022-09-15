@@ -182,7 +182,10 @@ class J1939Fuzzer:
                 .add_description("Should the generator mutate the data field?"),
 
             Setting("mutate_data_length", False).add_constraint("boolean", lambda x: type(x) is bool)
-                .add_description("Should the generator mutate the length of the data field?")
+                .add_description("Should the generator mutate the length of the data field?"),
+
+            Setting("carry_on", False).add_constraint("boolean", lambda x: type(x) is bool)
+                .add_description("Should the fuzzer skip waiting for you to reset the ECU and just carry on fuzzing?"),
         ]
 
         for setting in sl:
@@ -505,7 +508,11 @@ class J1939Fuzzer:
                 print("    Stored current interval fuzzed messages to: " + filename_current)
                 self.devil.save_data_collected(self.fuzzed_messages, filename_current, False)
 
-                val = input("Please restart the ECU. Once complete, enter 'y' to continue / 'q' to quit fuzzing: ")
+                val = "yes"
+                if not self.sm.carry_on:
+                    val = input("Please restart the ECU. Once complete, enter 'y' to continue / 'q' to quit fuzzing: ")
+                else:
+                    time.sleep(1.)
                 if val.lower() == "yes" or val.lower() == "y":
                     self.pause_fuzzing = False
                 elif val.lower() == "quit" or val.lower() == "q":
