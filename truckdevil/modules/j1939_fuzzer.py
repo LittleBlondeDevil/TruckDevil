@@ -481,6 +481,11 @@ class J1939Fuzzer:
                         anomaly = True
                         any_anomalies = True
                         message = "Number of messages changed by " + "{:.2f}".format(percent_diff) + "%"
+                elif any([x not in self.baseline[src]['pgns'].keys() for x in after_fuzz[src]['pgns']]):
+                    anomaly = True
+                    any_anomalies = True
+                    message = "new PGNs detected from target: " + str(
+                            set(self.baseline[src]['pgns'].keys()) - set(after_fuzz[src]['pgns']))
                 if anomaly:
                     print("\n    source: " + str(src))
                     print("        interval messages/second: " + str(curr_per_sec))
