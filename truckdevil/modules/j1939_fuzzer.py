@@ -70,7 +70,7 @@ class J1939Fuzzer:
         @reboot_data_snip.setter
         def reboot_data_snip(self, value):
             if value.startswith("0x"):
-                value = value.strip("0x")
+                value = value[2:]
             if len(value) % 2 != 0 or len(value) > 3570:
                 raise ValueError('Length of data must be an even number and shorter than 1785 bytes')
             int(value, 16)  # should raise ValueError if not hexadecimal string
