@@ -70,7 +70,7 @@ class J1939Fuzzer:
         @reboot_data_snip.setter
         def reboot_data_snip(self, value):
             if value.startswith("0x"):
-                value = value.strip("0x")
+                value = value[2:]
             if len(value) % 2 != 0 or len(value) > 3570:
                 raise ValueError('Length of data must be an even number and shorter than 1785 bytes')
             int(value, 16)  # should raise ValueError if not hexadecimal string
@@ -182,7 +182,10 @@ class J1939Fuzzer:
                 .add_description("Should the generator mutate the data field?"),
 
             Setting("mutate_data_length", False).add_constraint("boolean", lambda x: type(x) is bool)
-                .add_description("Should the generator mutate the length of the data field?")
+                .add_description("Should the generator mutate the length of the data field?"),
+
+            Setting("carry_on", False).add_constraint("boolean", lambda x: type(x) is bool)
+                .add_description("Should the fuzzer skip waiting for you to reset the ECU and just carry on fuzzing?"),
         ]
 
         for setting in sl:
@@ -481,6 +484,11 @@ class J1939Fuzzer:
                         anomaly = True
                         any_anomalies = True
                         message = "Number of messages changed by " + "{:.2f}".format(percent_diff) + "%"
+                elif any([x not in self.baseline[src]['pgns'].keys() for x in after_fuzz[src]['pgns']]):
+                    anomaly = True
+                    any_anomalies = True
+                    message = "new PGNs detected from target: " + str(
+                            set(self.baseline[src]['pgns'].keys()) - set(after_fuzz[src]['pgns']))
                 if anomaly:
                     print("\n    source: " + str(src))
                     print("        interval messages/second: " + str(curr_per_sec))
@@ -500,7 +508,11 @@ class J1939Fuzzer:
                 print("    Stored current interval fuzzed messages to: " + filename_current)
                 self.devil.save_data_collected(self.fuzzed_messages, filename_current, False)
 
-                val = input("Please restart the ECU. Once complete, enter 'y' to continue / 'q' to quit fuzzing: ")
+                val = "yes"
+                if not self.sm.carry_on:
+                    val = input("Please restart the ECU. Once complete, enter 'y' to continue / 'q' to quit fuzzing: ")
+                else:
+                    time.sleep(1.)
                 if val.lower() == "yes" or val.lower() == "y":
                     self.pause_fuzzing = False
                 elif val.lower() == "quit" or val.lower() == "q":
