@@ -174,24 +174,46 @@ class J1939Interface:
             if not verbose:
                 if not candump:
                     print(j1939_message)
+
+                    # Write the J1939 message to the log file if enabled
                     if log_to_file:
-                        log_file.write(str(j1939_message) + '\n')
+                        try:
+                            log_file.write(str(j1939_message) + '\n')
+                        except Exception as e:
+                            # Print the error if unable to write to the log file
+                            print(f'error writing to log file: {e}')
                 else:
-                    if j1939_message.total_bytes < 9: 
-                        print(self.get_candump(j1939_message))
+                    if j1939_message.total_bytes < 9:
+                        try:
+                            # Get the candump representation of the J1939 message and print it
+                            print(self.get_candump(j1939_message))
+                        except Exception as e:
+                            # Print the error if unable to decode the message
+                            print(f'error decoding message: {e}')
+
                         if log_to_file:
-                            log_file.write(self.get_candump(j1939_message) + '\n')
+                            try:
+                                # Write the candump representation of the J1939 message to the log file
+                                log_file.write(self.get_candump(j1939_message) + '\n')
+                            except Exception as e:
+                                # Print the error if unable to write to the log file
+                                print(f'error writing to log file: {e}')
             else:
                 try:
-                    print(self.get_decoded_message(j1939_message))
+                    # Get the decoded message and print it
+                    output = self.get_decoded_message(j1939_message)
                 except Exception as e:
-                    print(f'error decoding message: {e}')
+                    # Print the error if unable to decode the message
+                    output = f'error decoding message: {e}'
 
+                print(output)
                 if log_to_file:
                     try:
-                        log_file.write(self.get_decoded_message(j1939_message) + '\n')
+                        # Write the decoded message to the log file
+                        log_file.write(output + '\n')
                     except Exception as e:
-                        log_file.write(f'error decoding message: {e}')
+                        # Print the error if unable to write to the log file
+                        print(f'error writing to log file: {e}')
 
             messages_printed = messages_printed + 1
         # Close the log file before exiting
