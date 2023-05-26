@@ -174,7 +174,6 @@ class J1939Interface:
             if not verbose:
                 if not candump:
                     print(j1939_message)
-
                     # Write the J1939 message to the log file if enabled
                     if log_to_file:
                         try:
@@ -186,15 +185,15 @@ class J1939Interface:
                     if j1939_message.total_bytes < 9:
                         try:
                             # Get the candump representation of the J1939 message and print it
-                            print(self.get_candump(j1939_message))
+                            output = print(self.get_candump(j1939_message))
                         except Exception as e:
                             # Print the error if unable to decode the message
                             print(f'error decoding message: {e}')
-
+                        print(output)
                         if log_to_file:
                             try:
                                 # Write the candump representation of the J1939 message to the log file
-                                log_file.write(self.get_candump(j1939_message) + '\n')
+                                log_file.write(output + '\n')
                             except Exception as e:
                                 # Print the error if unable to write to the log file
                                 print(f'error writing to log file: {e}')
@@ -204,8 +203,7 @@ class J1939Interface:
                     output = self.get_decoded_message(j1939_message)
                 except Exception as e:
                     # Print the error if unable to decode the message
-                    output = f'error decoding message: {e}'
-
+                    print(f'error decoding message: {e}')
                 print(output)
                 if log_to_file:
                     try:
@@ -214,7 +212,6 @@ class J1939Interface:
                     except Exception as e:
                         # Print the error if unable to write to the log file
                         print(f'error writing to log file: {e}')
-
             messages_printed = messages_printed + 1
         # Close the log file before exiting
         if log_to_file:
