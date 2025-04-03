@@ -53,13 +53,14 @@ class Device:
                 self._m2.setDTR(True)
                 # self._lockM2 = threading.RLock()
                 # Ensure that can_baud is filled to 7 digits
-                self.init_m2(self._can_baud, self._channel)
                 self._m2used = True
+                self.init_m2(self._can_baud, self._channel)
 
         else: # python-can
             # TODO: test other devices
             self._can_bus = interface.Bus(bustype=self._device_type, channel=self._channel, bitrate=self._can_baud)
             self._m2used = False
+
     def __str__(self):
         device_str = "\n***** CAN Device Info *****"
         device_str += "\nDevice Type: " + str(self._device_type) + (" encoder" if self._tcp_ip else "")
