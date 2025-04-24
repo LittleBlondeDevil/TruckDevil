@@ -1,6 +1,7 @@
 import cmd
 import importlib
 import sys
+import ipaddress
 from pkgutil import iter_modules
 
 from libs.device import Device
@@ -33,23 +34,28 @@ class FrameworkCommands(cmd.Cmd):
         """
         List the current CAN device
         """
-        print(str(self.device))
+        if self.device is not None:
+            print(str(self.device))
+        else:
+            print("No device configured.")
 
     def do_add_device(self, args):
         """
         Add a new hardware device. If one exists, replace it.
 
-        usage: add_device <interface> <channel> <can_baud> [serial_port]
+        usage: add_device <interface> <channel> <can_baud> [{serial,tcp}port]
 
         Arguments:
             interface       The CAN interface to use. e.g. m2 or one supported by python-can
                             https://python-can.readthedocs.io/en/master/interfaces.html
             channel         CAN channel to send/receive on. e.g. can0, can1, vcan0
             can_baud        Baudrate on the CAN bus. Most common are 250000 and 500000. Use 0 for autobaud detection.
-            serial_port     Serial port that the M2 is connected to, if used. For example: COM7 or /dev/ttyX.
+            port            Port that the M2 is connected to, if used. For example: COM7 or /dev/ttyX. 
+                            If using M2 encoder over TCP, this is the TCP port.
 
         examples:
         add_device m2 can0 250000 COM5
+        add_device m2:192.168.7.2 can0 500000 1234
         add_device socketcan vcan0 500000
         add_device pcan PCAN_USBBUS1 500000
         """
@@ -58,13 +64,25 @@ class FrameworkCommands(cmd.Cmd):
             print("Error: expected device details")
             self.do_help("add_device")
             return
+        # check if ":" is in the interface
         interface = argv[0]
+        if interface.find(":") != -1:
+            itf = argv[0].split(":")
+            interface = itf[0] # m2
+            if ipaddress.ip_address(itf[1]):
+                tcp_ip = itf[1]
+            else:
+                print("Error: invalid IP address")
+                self.do_help("add_device")
+                return
+        else:
+            tcp_ip = None
         channel = argv[1]
         can_baud = argv[2]
-        serial_port = None
+        port = None
         if len(argv) >= 4:
-            serial_port = argv[3]
-        self.device = Device(interface, serial_port, channel, can_baud)
+            port = argv[3]
+        self.device = Device(interface, tcp_ip, port, channel, can_baud)
 
     def do_list_modules(self, args):
         """

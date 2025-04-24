@@ -1,0 +1,248 @@
+#!/usr/bin/env python3
+import argparse
+import logging
+import socket
+import select
+import subprocess
+from typing import Optional
+import can
+
+logger = logging.getLogger(__name__)
+
+def can_setup(iface: str, baud: int) -> bool:
+    """Bring down 'iface', then bring it up at 'baud' (or 250k if baud=0). This needs root privs."""
+    cmd_down = ["ip", "link", "set", iface, "down"]
+    if subprocess.call(cmd_down) != 0:
+        logger.error("Could not bring down %s.", iface)
+        return False
+
+    if baud == 0:
+        baud = 250000  # default fallback
+
+    cmd_up = ["ip", "link", "set", iface, "up", "type", "can", "bitrate", str(baud)]
+    if subprocess.call(cmd_up) != 0:
+        logger.error("Could not bring up %s at baud %d", iface, baud)
+        return False
+
+    logger.info("Interface '%s' is up at %d bps.", iface, baud)
+    return True
+
+def encode(msg: can.Message) -> str:
+    """
+    Encode a python-can Message into M2 format: $<ID><DLC><DATA>*
+    - 8 hex digits if extended; up to 3 if standard.
+    """
+    can_id = msg.arbitration_id
+    is_extended = msg.is_extended_id
+
+    # Start delimiter
+    out = "$"
+    if is_extended:
+        out += f"{can_id:08X}"      # 8 hex for extended
+    else:
+        out += f"{can_id & 0x7FF:03X}"  # up to 3 hex for standard
+
+    # DLC => 2 hex
+    out += f"{msg.dlc:02X}"
+
+    # Data => DLC * 2 hex
+    out += msg.data.hex().upper()
+
+    return out + "*"
+
+def decode(m2str: str) -> Optional[can.Message]:
+    """
+    Decode an M2 string (excluding '$' and '*') into a python-can Message.
+    If >=10 hex => extended (8 hex ID), else standard (3 hex ID).
+    Returns None on parse error.
+    """
+    length = len(m2str)
+    if length < 5:  # minimum = 3 (ID) + 2 (DLC) = 5
+        return None
+
+    is_extended = (length >= 10)
+    id_len = 8 if is_extended else 3
+
+    if id_len > length:
+        return None
+
+    # ID
+    try:
+        can_id = int(m2str[:id_len], 16)
+    except ValueError:
+        return None
+
+    if not is_extended and can_id > 0x7FF:
+        return None  # invalid standard ID
+
+    # DLC
+    dlc_str = m2str[id_len:id_len+2]
+    try:
+        dlc = int(dlc_str, 16)
+    except ValueError:
+        return None
+    if dlc < 0 or dlc > 8:
+        return None
+
+    # DATA
+    data_hex = m2str[id_len+2:]
+    if len(data_hex) != dlc * 2:
+        return None
+    try:
+        data = bytes.fromhex(data_hex)
+    except ValueError:
+        return None
+
+    return can.Message(arbitration_id=can_id,
+                       is_extended_id=is_extended,
+                       dlc=dlc,
+                       data=data,
+                       is_rx=False)
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Bridge a SocketCAN interface <-> M2-over-TCP.")
+    parser.add_argument("bind_ip", help="IP address to bind the server socket")
+    parser.add_argument("tcp_port", type=int, help="TCP port to listen on")
+    parser.add_argument("-v", "--verbose", action="count", default=0,
+                        help="Increase verbosity (-v for INFO, -vv for DEBUG)")
+    return parser.parse_args()
+
+def main():
+    args = parse_args()
+
+    log_level = logging.WARNING
+    if args.verbose == 1:
+        log_level = logging.INFO
+    elif args.verbose >= 2:
+        log_level = logging.DEBUG
+    logging.basicConfig(level=log_level,
+                        format="%(levelname)s: %(message)s")
+
+    srv_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    srv_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    srv_sock.bind((args.bind_ip, args.tcp_port))
+    srv_sock.listen(1)
+
+    logger.info("Listening on %s:%d...", args.bind_ip, args.tcp_port)
+
+    # only one client per process
+    cli_sock, cli_addr = srv_sock.accept()
+    logger.info("Client connected from %s:%d", cli_addr[0], cli_addr[1])
+    srv_sock.close()
+
+    # #<7-digit-baud><4-char-iface>
+    #   (Blocking approach for simplicity)
+    def recv_exact(nbytes: int) -> bytes:
+        buf = bytearray()
+        while len(buf) < nbytes:
+            chunk = cli_sock.recv(nbytes - len(buf))
+            if not chunk:
+                return b''
+            buf.extend(chunk)
+        return bytes(buf)
+
+    # wait for '#'
+    while True:
+        c = cli_sock.recv(1)
+        if not c:
+            logger.error("Client disconnected before init.")
+            cli_sock.close()
+            return
+        if c == b'#':
+            break
+
+    init_data = recv_exact(11)
+    if len(init_data) < 11:
+        logger.error("Client disconnected during initialization.")
+        cli_sock.close()
+        return
+
+    baud_str = init_data[:7].decode('ascii', errors='replace')
+    iface_str = init_data[7:].decode('ascii', errors='replace')
+
+    try:
+        can_baud = int(baud_str)
+    except ValueError:
+        can_baud = 0
+
+    logger.info("Init => Baud=%d, Iface=%s", can_baud, iface_str)
+
+    # flush any leftover data and set non-blocking
+    leftover_data = b''
+    cli_sock.setblocking(False)
+    try:
+        while True:
+            chunk = cli_sock.recv(4096)
+            if not chunk:
+                break
+            leftover_data += chunk
+    except BlockingIOError:
+        pass
+
+    # bring up the CAN interface
+    if not can_setup(iface_str, can_baud):
+        cli_sock.close()
+        return
+
+    # python-can setup
+    try:
+        bus = can.interface.Bus(channel=iface_str, bustype="socketcan")
+    except OSError as e:
+        logger.error("Could not open CAN interface %s: %s", iface_str, e)
+        cli_sock.close()
+        return
+
+    logger.info("Now bridging M2 <-> CAN on %s (baud=%d)", iface_str, can_baud)
+    tcp_inbuf = leftover_data.decode('utf-8', errors='replace')
+
+    while True:
+        msg = bus.recv(timeout=0.0)
+        if msg:
+            out_str = encode(msg)
+            try:
+                cli_sock.sendall(out_str.encode('utf-8', errors='replace'))
+            except (BlockingIOError, BrokenPipeError):
+                logger.info("Client disconnected.")
+                break
+
+        # select for non-blocking recv
+        rlist, _, _ = select.select([cli_sock], [], [], 0.01)
+        if cli_sock in rlist:
+            try:
+                chunk = cli_sock.recv(4096)
+                if not chunk:
+                    logger.info("Client disconnected.")
+                    break
+                tcp_inbuf += chunk.decode('utf-8', errors='replace')
+            except BlockingIOError:
+                pass
+
+        # parse $...* from tcp_inbuf
+        while True:
+            start_pos = tcp_inbuf.find('$')
+            if start_pos < 0:
+                break
+            end_pos = tcp_inbuf.find('*', start_pos)
+            if end_pos < 0:
+                # incomplete message
+                break
+
+            frame_str = tcp_inbuf[start_pos+1:end_pos]
+            # remove that chunk from tcp_inbuf
+            tcp_inbuf = tcp_inbuf[:start_pos] + tcp_inbuf[end_pos+1:]
+
+            decoded_msg = decode(frame_str)
+            if decoded_msg:
+                try:
+                    bus.send(decoded_msg)
+                except can.CanError as e:
+                    logger.error("CAN send error: %s", e)
+            else:
+                logger.debug("Invalid M2 frame ignored: %s", frame_str)
+
+    cli_sock.close()
+    logger.info("Bridge shutdown.")
+
+if __name__ == "__main__":
+    main()

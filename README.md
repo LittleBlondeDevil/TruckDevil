@@ -18,6 +18,8 @@ Additionally, an OBD-II to J1939 deutsch 9 pin adapter or splitter could be util
 
 Additional software is required to flash the m2_sketch firmware to the M2, if used (see Installation).
 
+If you would like to read J1939 messages remotely, a TCP socket server can be set up to bridge M2 encoded messages to a remote client also running TruckDevil. (see [remote](#remote-socket-server))
+
 ## Installation
 ```
 > git clone https://github.com/LittleBlondeDevil/TruckDevil.git
@@ -130,3 +132,27 @@ def main_mod(argv, device)
 
 Python docs are available in the j1939.py file. Existing modules provide example usage.
 
+### Remote Socket Server
+
+
+An example TCP socket server and systemd service for Linux based machines is included in the [tcp](tcp) folder. This server then encodes SocketCAN to M2 CAN messages and sends them to the TruckDevil client.
+```
+python3 .\truckdevil-tcp -h
+usage: truckdevil-tcp [-h] [-v] bind_ip tcp_port
+
+Bridge a SocketCAN interface <-> M2-over-TCP.
+
+positional arguments:
+  bind_ip        IP address to bind the server socket
+  tcp_port       TCP port to listen on
+
+options:
+  -h, --help     show this help message and exit
+  -v, --verbose  Increase verbosity (-v for INFO, -vv for DEBUG)
+```
+
+To connect to the server, add it as a device. For example:
+```
+(truckdevil) add_device m2:192.168.7.2 can0 500000 1234
+```
+You can then read and write messages to the server as if it were a local device.
