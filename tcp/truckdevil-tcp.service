@@ -1,0 +1,13 @@
+# change the ip and port if needed
+[Unit]
+Description=TCP M2 Encoder Router
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/truckdevil-tcp -v 0.0.0.0 1234
+Restart=on-failure
+User=root
+
+[Install]
+WantedBy=multi-user.target
