@@ -130,6 +130,28 @@ help  load  print_messages  save  set  settings  unset
 18FEDF00    06 FEDF 00 --> FF [0008] FE00FEFE7D0200FF
 ```
 
+### Pretty Printing with pretty_j1939
+
+TruckDevil integrates with the `pretty_j1939` project to provide high-performance, colorized, and searchable J1939 message rendering.
+
+#### Settings:
+- `pretty` (boolean): Enable or disable pretty printing.
+- `pretty_j1939_args` (string): Pass arguments directly to the `pretty_j1939` renderer
+- `pretty_da_json` (string): Source for J1939 definitions. Use `<truckdevil>` (default) to sync from TruckDevil's internal JSON files, `""` (blank) to use `pretty_j1939`'s installed defaults, or provide a path to a consolidated `J1939db.json`.
+
+#### Example:
+
+```
+(truckdevil.read_messages) set pretty true
+(truckdevil.read_messages) set num_messages 4
+(truckdevil.read_messages) print_messages
+{"PGN":"Vehicle Dynamic Stability Control 2(61449)","SA":"Brakes - System Controller( 11)","DA":"All(255)","Bytes":"FFFFFFFFFFFFFFFF"}
+{"PGN":"Vehicle Dynamic Stability Control 2(61449)","SA":"Brakes - System Controller( 11)","DA":"All(255)","Bytes":"FFFFFFFFFFFFFFFF"}
+{"PGN":"Vehicle Dynamic Stability Control 2(61449)","SA":"Brakes - System Controller( 11)","DA":"All(255)","Bytes":"FFFFFFFFFFFFFFFF"}
+{"PGN":"Vehicle Dynamic Stability Control 2(61449)","SA":"Brakes - System Controller( 11)","DA":"All(255)","Bytes":"FFFFFFFFFFFFFFFF"}
+{"Summary":"graph LR; N11["Brakes - System Controller(11)"]; All["All(255)"]; N11 -- Vehicle Dynamic Stability Control 2(61449) --> All"}
+```
+
 ### Custom Modules
 
 Create custom modules by creating a python file in the 'modules' folder. 

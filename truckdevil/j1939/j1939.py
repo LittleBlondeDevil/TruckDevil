@@ -5,7 +5,8 @@ import copy
 import json
 import os
 import can
-
+import shlex
+from libs.pretty_shim import PrettyShim, DEFAULT_PRETTY_ARGS, MAGIC_TRUCKDEVIL
 
 def j1939_fields_to_can_id(priority, reserved_bit, data_page_bit, pdu_format, pdu_specific, src_addr):
     return int(bin(priority)[2:].zfill(3) + bin(reserved_bit)[2:].zfill(1) +
@@ -14,7 +15,7 @@ def j1939_fields_to_can_id(priority, reserved_bit, data_page_bit, pdu_format, pd
 
 
 class J1939Interface:
-    def __init__(self, device):
+    def __init__(self, device, pretty_args=DEFAULT_PRETTY_ARGS, pretty_da_json=MAGIC_TRUCKDEVIL):
         """
         Initializes truckdevil
 
@@ -22,6 +23,8 @@ class J1939Interface:
         :param port: serial port that the M2 is connected to, if used. For example: COM7 or /dev/ttyX. 0 if not using M2."
         :param channel: CAN channel to send/receive on. For example: can0, can1, or vcan0. (Default value = 'can0')
         :param can_baud: baudrate on the CAN bus. Most common are 250000 and 500000. Use 0 for autobaud detection. (Default value = 0)
+        :param pretty_args: string of arguments to pass to pretty_j1939 (Default value = DEFAULT_PRETTY_ARGS)
+        :param pretty_da_json: source for J1939 definitions. MAGIC_TRUCKDEVIL for in-memory conversion or a filename.
         """
         self.device = device
 
@@ -36,37 +39,51 @@ class J1939Interface:
         self._collection_thread = None
 
         self.pgn_list = {}
-        with open(os.path.join('resources', 'json_files', 'pgn_list.json')) as pgn_file:
+        base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        json_dir = os.path.join(base_path, 'resources', 'json_files')
+        
+        with open(os.path.join(json_dir, 'pgn_list.json')) as pgn_file:
             self.pgn_list = json.load(pgn_file)
 
         self.spn_list = {}
-        with open(os.path.join('resources', 'json_files', 'spn_list.json')) as spn_file:
+        with open(os.path.join(json_dir, 'spn_list.json')) as spn_file:
             self.spn_list = json.load(spn_file)
 
         self.src_addr_list = {}
-        with open(os.path.join('resources', 'json_files', 'src_addr_list.json')) \
+        with open(os.path.join(json_dir, 'src_addr_list.json')) \
                 as src_addr_file:
             self.src_addr_list = json.load(src_addr_file)
 
         self.bit_decoding_list = {}
-        with open(os.path.join('resources', 'json_files', 'dataBitDecoding.json')) \
+        with open(os.path.join(json_dir, 'dataBitDecoding.json')) \
                 as bit_decoding_file:
             self.bit_decoding_list = json.load(bit_decoding_file)
 
         self.uds_services_list = {}
-        with open(os.path.join('resources', 'json_files', 'UDS_services.json')) \
+        with open(os.path.join(json_dir, 'UDS_services.json')) \
                 as UDS_services_file:
             self.uds_services_list = json.load(UDS_services_file)
 
         self.uds_functions_list = {}
-        with open(os.path.join('resources', 'json_files', 'UDS_functions.json')) \
+        with open(os.path.join(json_dir, 'UDS_functions.json')) \
                 as UDS_functions_file:
             self.uds_functions_list = json.load(UDS_functions_file)
 
         self.uds_nrc_list = {}
-        with open(os.path.join('resources', 'json_files', 'UDS_NRC.json')) \
+        with open(os.path.join(json_dir, 'UDS_NRC.json')) \
                 as UDS_NRC_file:
             self.uds_nrc_list = json.load(UDS_NRC_file)
+
+        self.pretty_shim = PrettyShim(self, pretty_args, pretty_da_json)
+
+    def update_pretty_settings(self, arg_string, da_json_source=MAGIC_TRUCKDEVIL):
+        """
+        Updates the pretty_j1939 describer and renderer settings based on an argument string.
+        
+        :param arg_string: string of pretty_j1939 CLI arguments
+        :param da_json_source: source for J1939 definitions. MAGIC_TRUCKDEVIL for in-memory conversion or a filename.
+        """
+        self.pretty_shim.update_settings(arg_string, da_json_source)
 
     @property
     def data_collection_occurring(self):
@@ -96,7 +113,7 @@ class J1939Interface:
         self._print_messages_time_done = True
 
     def print_messages(self, abstract_tpm=True, read_time=None, num_messages=None, verbose=False, log_to_file=False,
-                       file_name=None, candump=False, **filters):
+                       file_name=None, candump=False, pretty=False, **filters):
         """
         Read and print messages from device based on optional filters provided.
         Each filter is a list, messages are only read if it satisfies every filter condition.
@@ -112,6 +129,7 @@ class J1939Interface:
         :param file_name: if log_to_file is True, this will be the name of the log file (Default value =
                         'log_[time].txt')
         :param timestamp: whether to include a timestamp when printing messages (Default value = True)
+        :param pretty: whether to use pretty_j1939 for rendering (Default value = False)
         :param filters:
             See below
         :Keyword Arguments:
@@ -171,7 +189,7 @@ class J1939Interface:
                     (len(data_snippet) == 0 or True in [i.upper() in j1939_message.data.upper() for i in data_snippet])):
                 continue
             # Print/log the message
-            if not verbose:
+            if not verbose and not pretty:
                 if not candump:
                     print(j1939_message)
                     # Write the J1939 message to the log file if enabled
@@ -185,7 +203,7 @@ class J1939Interface:
                     if j1939_message.total_bytes < 9:
                         try:
                             # Get the candump representation of the J1939 message and print it
-                            output = print(self.get_candump(j1939_message))
+                            output = self.get_candump(j1939_message)
                         except Exception as e:
                             # Print the error if unable to decode the message
                             print(f'error decoding message: {e}')
@@ -197,6 +215,21 @@ class J1939Interface:
                             except Exception as e:
                                 # Print the error if unable to write to the log file
                                 print(f'error writing to log file: {e}')
+            elif pretty:
+                try:
+                    # Get the pretty message and print it
+                    output = self.pretty_shim.get_pretty_output(j1939_message)
+                except Exception as e:
+                    # Print the error if unable to pretty print the message
+                    print(f'error pretty printing message: {e}')
+                print(output)
+                if log_to_file:
+                    try:
+                        # Write the pretty message to the log file
+                        log_file.write(output + '\n')
+                    except Exception as e:
+                        # Print the error if unable to write to the log file
+                        print(f'error writing to log file: {e}')
             else:
                 try:
                     # Get the decoded message and print it
@@ -218,6 +251,9 @@ class J1939Interface:
             log_file.close()
         if read_time is not None:
             self._print_messages_timer.cancel()
+        
+        if pretty:
+            self.pretty_shim.print_summary()
 
     def read_messages_until(self, rts_response_addr=None, **params):
         """
@@ -326,7 +362,7 @@ class J1939Interface:
         self._clear_collected_messages()
         return data_collected
 
-    def save_data_collected(self, messages, file_name=None, verbose=False):
+    def save_data_collected(self, messages, file_name=None, verbose=False, pretty=False):
         # TODO: fix save/load functions
         """
         Save the collected messages to a log file
@@ -334,6 +370,7 @@ class J1939Interface:
         :param messages: list of J1939Message objects
         :param file_name: the name of the file to save the data to. (Default value = 'log_[time].txt')
         :param verbose: whether or not to save the message in decoded form (Default value = False)
+        :param pretty: whether or not to save the message in pretty form (Default value = False)
         """
         # If given messages list is empty
         if len(messages) == 0:
@@ -343,7 +380,9 @@ class J1939Interface:
         f = open(file_name, "x")
         f.write("""CAN_ID   Priority    PGN    Source --> Destination    [Num Bytes]    data""" + '\n')
         for m in messages:
-            if not verbose:
+            if pretty:
+                f.write("{}\n".format(self.pretty_shim.get_pretty_output(m)))
+            elif not verbose:
                 f.write("{}\n".format(m))
             else:
                 f.write("{}\n".format(self.get_decoded_message(m)))
