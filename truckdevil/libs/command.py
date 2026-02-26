@@ -1,4 +1,5 @@
 import cmd
+import sys
 
 
 class Command(cmd.Cmd):
@@ -60,3 +61,9 @@ class Command(cmd.Cmd):
 
     def complete_unset(self, text, line, begidx, endidx):
         return self.complete_set(text, line, begidx, endidx)
+
+    def do_quit(self, arg):
+        """
+        Quit TruckDevil
+        """
+        sys.exit("Exiting TruckDevil")
