@@ -80,3 +80,75 @@ def test_send_messages_invalid_args_no_data(truckdevil_module_env, shared_channe
                 device.can_bus.shutdown()
             except Exception:
                 pass
+
+
+def test_send_messages_bad_hex_can_id(truckdevil_module_env, shared_channel):
+    """send 0xZZZZ AABB: prints error instead of crashing."""
+    from libs.device import Device
+    import modules.send_messages as send_messages
+
+    device = Device("virtual", None, shared_channel, 250000)
+    try:
+        buf = __import__("io").StringIO()
+        old = sys.stdout
+        try:
+            sys.stdout = buf
+            send_messages.main_mod(["send", "0xZZZZ", "AABB", "back"], device)
+        finally:
+            sys.stdout = old
+        out = buf.getvalue()
+        assert "could not parse can id" in out.lower()
+    finally:
+        if device.can_bus is not None:
+            try:
+                device.can_bus.shutdown()
+            except Exception:
+                pass
+
+
+def test_send_messages_bad_data_non_hex(truckdevil_module_env, shared_channel):
+    """send 0x18EA00FF XYZ123: prints error instead of crashing."""
+    from libs.device import Device
+    import modules.send_messages as send_messages
+
+    device = Device("virtual", None, shared_channel, 250000)
+    try:
+        buf = __import__("io").StringIO()
+        old = sys.stdout
+        try:
+            sys.stdout = buf
+            send_messages.main_mod(["send", "0x18EA00FF", "XYZ123", "back"], device)
+        finally:
+            sys.stdout = old
+        out = buf.getvalue()
+        assert "invalid message" in out.lower()
+    finally:
+        if device.can_bus is not None:
+            try:
+                device.can_bus.shutdown()
+            except Exception:
+                pass
+
+
+def test_send_messages_bad_data_odd_length(truckdevil_module_env, shared_channel):
+    """send 0x18EA00FF AAB: prints error for odd-length hex data."""
+    from libs.device import Device
+    import modules.send_messages as send_messages
+
+    device = Device("virtual", None, shared_channel, 250000)
+    try:
+        buf = __import__("io").StringIO()
+        old = sys.stdout
+        try:
+            sys.stdout = buf
+            send_messages.main_mod(["send", "0x18EA00FF", "AAB", "back"], device)
+        finally:
+            sys.stdout = old
+        out = buf.getvalue()
+        assert "invalid message" in out.lower()
+    finally:
+        if device.can_bus is not None:
+            try:
+                device.can_bus.shutdown()
+            except Exception:
+                pass

@@ -35,18 +35,22 @@ class SendCommands(Command):
             print("arguments not found, see 'help send'")
             return
         can_id = argv[0]
-        if can_id.startswith("0x"):
-            can_id = int(can_id, 16)
-        else:
-            try:
+        try:
+            if can_id.startswith("0x") or can_id.startswith("0X"):
+                can_id = int(can_id, 16)
+            else:
                 can_id = int(can_id)
-            except Exception as e:
-                print(f'Could not parse can id - error: {e}')
-                return
+        except ValueError as e:
+            print(f'Could not parse can id - error: {e}')
+            return
 
         data = argv[1]
 
-        message = J1939Message(can_id, data)
+        try:
+            message = J1939Message(can_id, data)
+        except ValueError as e:
+            print(f'Invalid message - error: {e}')
+            return
         if len(argv) == 3:
             verbose = argv[2][1:].lower()
             if verbose == 'v':
