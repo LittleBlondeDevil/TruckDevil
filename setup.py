@@ -1,5 +1,6 @@
 from setuptools import setup, find_packages
 import os
+import re
 
 
 def read(*paths):
@@ -8,9 +9,14 @@ def read(*paths):
         return f.read()
 
 
+def get_version():
+    init = read('truckdevil', '__init__.py')
+    return re.search(r"__version__\s*=\s*['\"]([^'\"]+)['\"]", init).group(1)
+
+
 setup(
     name='truckdevil',
-    version='1.0.0',
+    version=get_version(),
     description='J1939 testing framework',
     long_description=read('README.md'),
     long_description_content_type="text/markdown",
