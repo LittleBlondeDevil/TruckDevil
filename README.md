@@ -1,18 +1,16 @@
-## Description
+# TruckDevil
 
-TruckDevil is a framework for interacting with and assessing ECUs that use J1939 for communications on the CANBUS.
+A framework for interacting with and assessing ECUs that use J1939 for communications on the CAN bus.
 
 ## Requirements
 
-### Hardware:
+### Hardware
 
-The recommended CAN transciever to use is the Macchina M2 ([Under-the-Dash](https://www.macchina.cc/catalog/m2-boards/m2-under-dash)).
+The recommended CAN transceiver is the Macchina M2 ([Under-the-Dash](https://www.macchina.cc/catalog/m2-boards/m2-under-dash)).
 
-However, python-can is used so hardware devices with any of the supported interfaces, such as SocketCAN, could be used: ([CAN Interface Modules](https://python-can.readthedocs.io/en/master/interfaces.html)).
+However, python-can is used so any [supported CAN interface](https://python-can.readthedocs.io/en/master/interfaces.html) (e.g. SocketCAN) will work. An OBD-II to J1939 deutsch 9-pin adapter or splitter may also be needed, available on [Amazon](https://www.amazon.com/dp/B073DJN7FG).
 
-Additionally, an OBD-II to J1939 deutsch 9 pin adapter or splitter could be utilized, available on [Amazon](https://www.amazon.com/gp/product/B073DJN7FG/ref=ppx_yo_dt_b_asin_title_o05_s00?ie=UTF8&psc=1).
-
-### Software:
+### Software
 
 [Python 3](https://www.python.org/downloads/) is required.
 
@@ -21,6 +19,11 @@ Additional software is required to flash the m2_sketch firmware to the M2, if us
 ## Installation
 ```
 > git clone https://github.com/LittleBlondeDevil/TruckDevil.git
+> cd TruckDevil
+> python -m venv venv
+> venv\Scripts\activate        # Windows
+> source venv/bin/activate     # Linux / macOS
+> pip install -r requirements.txt
 ```
 ### M2 (if used)
 
@@ -49,13 +52,24 @@ Additional software is required to flash the m2_sketch firmware to the M2, if us
     ```
     - Once uploaded, disconnect M2 and plug back in.
 
+## Testing
+
+From the repo root (uses a virtual CAN interface; no hardware required):
+
+```
+> pip install pytest
+> python -m pytest tests/ -v
+```
+
+See [tests/README.md](tests/README.md) for more detail.
+
 ## Usage
 
 TruckDevil contains various modules for reading, sending, ECU discovery, and fuzzing. Additional modules can be added
 for more specific tasks.
 
 ### Getting Started
-* Interactively 
+* Interactively (example using M2; replace with `add_device virtual vcan0 250000` for no-hardware testing)
 ```
 > python truckdevil.py
 Welcome to the truckdevil framework
@@ -123,8 +137,8 @@ The file should contain the following function:
 ```
 def main_mod(argv, device)
 ```
-- <b>argv</b> contains the list of arguments passed to the module 
-- <b>device</b> contains the Device object passed to the module
+- **argv** contains the list of arguments passed to the module 
+- **device** contains the Device object passed to the module
 
 ### J1939 API
 
