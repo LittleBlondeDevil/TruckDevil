@@ -1,6 +1,7 @@
 """Tests for framework CLI (truckdevil.py) with virtual device."""
 import importlib.util
 import os
+import re
 import sys
 import uuid
 
@@ -31,6 +32,42 @@ def _load_framework_commands():
 @pytest.fixture
 def shared_channel():
     return f"cli-{uuid.uuid4().hex}"
+
+
+def _load_version():
+    """Load __version__ from truckdevil/__init__.py."""
+    spec = importlib.util.spec_from_file_location(
+        "truckdevil_init",
+        os.path.join(_TRUCKDEVIL_DIR, "__init__.py"),
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.__version__
+
+
+def test_version_format():
+    """__version__ exists and follows semver (MAJOR.MINOR.PATCH)."""
+    version = _load_version()
+    assert re.match(r"^\d+\.\d+\.\d+$", version), f"unexpected version format: {version}"
+
+
+def test_version_in_intro_banner(truckdevil_module_env):
+    """The intro banner contains the version string."""
+    FrameworkCommands = _load_framework_commands()
+    version = _load_version()
+    fc = FrameworkCommands()
+    assert version in fc.intro
+
+
+def test_version_flag(truckdevil_module_env):
+    """python truckdevil.py --version prints 'truckdevil <version>' and exits."""
+    import subprocess
+    result = subprocess.run(
+        [sys.executable, os.path.join(_TRUCKDEVIL_DIR, "truckdevil.py"), "--version"],
+        capture_output=True, text=True, timeout=10,
+    )
+    assert result.returncode == 0
+    assert _load_version() in result.stdout
 
 
 def test_cli_add_device_list_device(truckdevil_module_env, shared_channel):

@@ -4,10 +4,11 @@ import sys
 from pkgutil import iter_modules
 
 from libs.device import Device
+from __init__ import __version__
 
 
 class FrameworkCommands(cmd.Cmd):
-    intro = "Welcome to the truckdevil framework. Type 'help or ?' for a list of commands."
+    intro = "Welcome to the truckdevil framework v{}. Type 'help or ?' for a list of commands.".format(__version__)
     prompt = '(truckdevil) '
 
     def __init__(self):
@@ -136,6 +137,10 @@ class FrameworkCommands(cmd.Cmd):
         return completions
 
 if __name__ == "__main__":
+    if "--version" in sys.argv or "-V" in sys.argv:
+        print("truckdevil {}".format(__version__))
+        sys.exit(0)
+
     fc = FrameworkCommands()
     if len(sys.argv) > 1:
         if sys.argv[1] == "add_device" and "run_module" in sys.argv:
