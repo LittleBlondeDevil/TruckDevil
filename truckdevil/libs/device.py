@@ -35,7 +35,7 @@ class Device:
             self._m2used = True
         else:
             # TODO: test other devices
-            self._can_bus = interface.Bus(bustype=device_type, channel=channel, bitrate=can_baud)
+            self._can_bus = interface.Bus(interface=device_type, channel=channel, bitrate=can_baud)
             self._m2used = False
 
     def __str__(self):
