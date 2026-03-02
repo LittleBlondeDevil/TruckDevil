@@ -3,6 +3,7 @@ import dill
 from j1939.j1939 import J1939Interface
 from libs.command import Command
 from libs.settings import SettingsManager, Setting
+from libs.pretty_shim import DEFAULT_PRETTY_ARGS, MAGIC_TRUCKDEVIL, MAGIC_DEFAULT
 
 
 class Reader:
@@ -29,6 +30,15 @@ class Reader:
 
             Setting("candump", False).add_constraint("boolean", lambda x: type(x) is bool)
                 .add_description("Display the messages in candump format"),
+
+            Setting("pretty", False).add_constraint("boolean", lambda x: type(x) is bool)
+                .add_description("Display the messages in pretty form using pretty_j1939"),
+
+            Setting("pretty_j1939_args", DEFAULT_PRETTY_ARGS)
+                .add_description("Arguments to pass to the pretty_j1939 renderer and describer"),
+
+            Setting("pretty_da_json", MAGIC_TRUCKDEVIL)
+                .add_description(f"Source for J1939 definitions. \"{MAGIC_TRUCKDEVIL}\" for in-memory conversion, \"{MAGIC_DEFAULT}\" for pretty_j1939 defaults, or a filename."),
 
             Setting("filter_can_id", [0]).add_constraint("list_of_ints", lambda x: all(isinstance(i, int) for i in x))
                 .add_description("Only read messages containing one of these CAN IDs."),
@@ -113,7 +123,8 @@ class ReadCommands(Command):
         set read_time 10
         set filter_src_addr 11,249
         """
-        argv = arg.split()
+        import shlex
+        argv = shlex.split(arg)
         name = argv[0]
         if len(argv) == 1:
             print("expected value, see 'help set'")
@@ -189,11 +200,15 @@ class ReadCommands(Command):
         file_name = None
         if self.reader.sm["log_name"].updated:
             file_name = self.reader.sm.log_name
+        if self.reader.sm["pretty_j1939_args"].updated or self.reader.sm["pretty_da_json"].updated:
+            self.devil.update_pretty_settings(self.reader.sm.pretty_j1939_args, self.reader.sm.pretty_da_json)
         try:
             self.devil.print_messages(self.reader.sm.abstract_TPM, read_time, num_messages,
                                       self.reader.sm.verbose, self.reader.sm.log_to_file, file_name, 
-                                      self.reader.sm.candump, **filters)
+                                      self.reader.sm.candump, self.reader.sm.pretty, **filters)
         except KeyboardInterrupt:
+            if self.reader.sm.pretty:
+                self.devil.pretty_shim.print_summary()
             return
         except FileExistsError:
             print("Log file already exists.")
