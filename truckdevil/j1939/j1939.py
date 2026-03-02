@@ -5,7 +5,6 @@ import copy
 import json
 import os
 import can
-import shlex
 from libs.pretty_shim import PrettyShim, DEFAULT_PRETTY_ARGS, MAGIC_TRUCKDEVIL
 
 def j1939_fields_to_can_id(priority, reserved_bit, data_page_bit, pdu_format, pdu_specific, src_addr):
@@ -129,7 +128,8 @@ class J1939Interface:
         :param file_name: if log_to_file is True, this will be the name of the log file (Default value =
                         'log_[time].txt')
         :param timestamp: whether to include a timestamp when printing messages (Default value = True)
-        :param pretty: whether to use pretty_j1939 for rendering (Default value = False)
+        :param pretty: whether to use pretty_j1939 for rendering (Default value = False).
+                        Mutually exclusive with verbose; if both are True, pretty takes priority.
         :param filters:
             See below
         :Keyword Arguments:
@@ -219,10 +219,10 @@ class J1939Interface:
                 try:
                     # Get the pretty message and print it
                     output = self.pretty_shim.get_pretty_output(j1939_message)
+                    print(output)
                 except Exception as e:
                     # Print the error if unable to pretty print the message
                     print(f'error pretty printing message: {e}')
-                print(output)
                 if log_to_file:
                     try:
                         # Write the pretty message to the log file
@@ -370,7 +370,8 @@ class J1939Interface:
         :param messages: list of J1939Message objects
         :param file_name: the name of the file to save the data to. (Default value = 'log_[time].txt')
         :param verbose: whether or not to save the message in decoded form (Default value = False)
-        :param pretty: whether or not to save the message in pretty form (Default value = False)
+        :param pretty: whether or not to save the message in pretty form (Default value = False).
+                        Mutually exclusive with verbose; if both are True, pretty takes priority.
         """
         # If given messages list is empty
         if len(messages) == 0:

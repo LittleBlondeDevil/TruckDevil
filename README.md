@@ -132,7 +132,9 @@ help  load  print_messages  save  set  settings  unset
 
 ### Pretty Printing with pretty_j1939
 
-TruckDevil integrates with the `pretty_j1939` project to provide high-performance, colorized, and searchable J1939 message rendering.
+TruckDevil can integrate with the `pretty_j1939` project to provide high-performance, colorized, and searchable J1939 message rendering.
+
+The optional dependency must be installed using `pip install truckdevil[pretty]` to access this feature.
 
 #### Settings:
 - `pretty` (boolean): Enable or disable pretty printing.

@@ -3,4 +3,3 @@ python-can>=4.0
 dill>=0.3.4
 setuptools>=57.0.0
 pytest>=7.0
-pretty_j1939>=0.0.3

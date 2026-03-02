@@ -1,9 +1,8 @@
 import os
-import json
 import shlex
-import bitstring
 
 try:
+    import bitstring
     import pretty_j1939.describe
     import pretty_j1939.render
     import pretty_j1939.__main__

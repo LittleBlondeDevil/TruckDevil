@@ -39,5 +39,10 @@ setup(
         'python-can>=3.3.4',
         'dill>=0.3.4',
     ],
+    extras_require={
+        'pretty': [
+            'pretty_j1939>=0.0.3',
+        ],
+    },
     packages=find_packages(exclude=['tests*']),
 )
