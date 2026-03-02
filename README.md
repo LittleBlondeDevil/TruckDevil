@@ -143,4 +143,3 @@ def main_mod(argv, device)
 ### J1939 API
 
 Python docs are available in the j1939.py file. Existing modules provide example usage.
-

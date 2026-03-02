@@ -643,6 +643,7 @@ class FuzzerCommands(Command):
     def __init__(self, device):
         super().__init__()
         self.fz = J1939Fuzzer(device)
+        self.sm = self.fz.sm
 
     def do_settings(self, arg):
         """Show the settings and each setting value"""
@@ -928,6 +929,21 @@ class FuzzerCommands(Command):
         Following a ctrl-d quit the whole program
         """
         sys.exit(0)
+
+    def complete_save(self, text, line, begidx, endidx):
+        verbs = ["all", "fuzz_settings", "targets", "test_cases", "baseline"]
+        if not text:
+            return verbs
+        return [v for v in verbs if v.startswith(text)]
+
+    def complete_load(self, text, line, begidx, endidx):
+        return self.complete_save(text, line, begidx, endidx)
+
+    def complete_target(self, text, line, begidx, endidx):
+        verbs = ["add", "modify", "remove", "list", "clear"]
+        if not text:
+            return verbs
+        return [v for v in verbs if v.startswith(text)]
 
 
 def main_mod(argv, device):

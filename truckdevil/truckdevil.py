@@ -1,5 +1,6 @@
 import cmd
 import importlib
+import os
 import sys
 from pkgutil import iter_modules
 
@@ -14,7 +15,8 @@ class FrameworkCommands(cmd.Cmd):
     def __init__(self):
         super().__init__()
         self._device = None
-        self.module_names = [name for _, name, _ in iter_modules(['modules'])]
+        module_path = os.path.join(os.path.dirname(__file__), 'modules')
+        self.module_names = [name for _, name, _ in iter_modules([module_path])]
 
     @property
     def device(self):
@@ -112,34 +114,56 @@ class FrameworkCommands(cmd.Cmd):
 
     def do_quit(self, args):
         """
-        Quit TruckDevil
+        Quit TruckDevil immediately, regardless of the current module state.
+        Unlike 'back', which returns to the parent menu, 'quit' will exit
+        the entire TruckDevil REPL immediately.
         """
         sys.exit("Exiting TruckDevil")
             
+    def complete_add_device(self, text, line, begidx, endidx):
+        import can
+        interfaces = ['m2']
+        if hasattr(can, 'VALID_INTERFACES'):
+            interfaces.extend(can.VALID_INTERFACES)
+        elif hasattr(can.interface, 'VALID_INTERFACES'):
+            interfaces.extend(can.interface.VALID_INTERFACES)
+
+        interfaces = sorted(list(set(interfaces)))
+
+        parts = line[:begidx].split()
+        if len(parts) == 1:
+            if not text:
+                return interfaces
+            return [i for i in interfaces if i.startswith(text)]
+        return []
+
     def complete_run_module(self, text, line, begidx, endidx):
-        if not text:
-            completions = self.module_names[:]
-        else:
-            completions = [ f
-                            for f in self.module_names
-                            if f.startswith(text)
-                            ]
-        return completions
+        parts = line[:begidx].split()
+        if len(parts) == 1:
+            if not text:
+                completions = self.module_names[:]
+            else:
+                completions = [ f
+                                for f in self.module_names
+                                if f.startswith(text)
+                                ]
+            return completions
+        return []
 
     def complete_use(self, text, line, begidx, endidx):
-        if not text:
-            completions = self.module_names[:]
-        else:
-            completions = [ f
-                            for f in self.module_names
-                            if f.startswith(text)
-                            ]
-        return completions
+        return self.complete_run_module(text, line, begidx, endidx)
 
 if __name__ == "__main__":
     if "--version" in sys.argv or "-V" in sys.argv:
         print("truckdevil {}".format(__version__))
         sys.exit(0)
+
+    try:
+        import readline
+    except ImportError:
+        if sys.platform == 'win32':
+            print("Warning: readline not found. Tab-completion may not work.")
+            print("Try: pip install pyreadline3")
 
     fc = FrameworkCommands()
     if len(sys.argv) > 1:
