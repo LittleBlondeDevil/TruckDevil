@@ -340,6 +340,15 @@ class DiscoveryCommands(Command):
         """
         return True
 
+    def complete_save(self, text, line, begidx, endidx):
+        import glob as g
+        if not text:
+            return g.glob('*')
+        return g.glob(text + '*')
+
+    def complete_load(self, text, line, begidx, endidx):
+        return self.complete_save(text, line, begidx, endidx)
+
 def main_mod(argv, device):
     if device is None:
         print("add device first.")

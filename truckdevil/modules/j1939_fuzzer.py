@@ -643,6 +643,7 @@ class FuzzerCommands(Command):
     def __init__(self, device):
         super().__init__()
         self.fz = J1939Fuzzer(device)
+        self.sm = self.fz.sm
 
     def do_settings(self, arg):
         """Show the settings and each setting value"""

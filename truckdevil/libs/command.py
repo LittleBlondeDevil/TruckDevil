@@ -3,6 +3,15 @@ import sys
 
 
 class Command(cmd.Cmd):
+    def __init__(self, sm=None):
+        """
+        :param sm: optional SettingsManager instance for tab-completion of
+                   set/unset commands. Subclasses may also set self.sm after
+                   calling super().__init__().
+        """
+        super().__init__()
+        self.sm = sm
+
     def run_commands(self, argv):
         """
         run commands from list of arguments
@@ -20,41 +29,11 @@ class Command(cmd.Cmd):
         if len(cmd_args) != 0:
             self.onecmd(' '.join(cmd_args))
 
-    def _get_sm(self):
-        """
-        Attempt to find a SettingsManager in the instance
-        """
-        # Search in direct attributes
-        if hasattr(self, 'sm'):
-            return self.sm
-        
-        # Search in common module attributes
-        for attr_name in ['fz', 'reader', 'devil']:
-            if hasattr(self, attr_name):
-                attr = getattr(self, attr_name)
-                if hasattr(attr, 'sm'):
-                    return attr.sm
-        
-        # Fallback: search all attributes for anything with an 'sm' attribute
-        for attr_name in dir(self):
-            if attr_name.startswith('_'):
-                continue
-            try:
-                attr = getattr(self, attr_name)
-                if hasattr(attr, 'sm'):
-                    from libs.settings import SettingsManager
-                    if isinstance(attr.sm, SettingsManager):
-                        return attr.sm
-            except:
-                continue
-        return None
-
     def complete_set(self, text, line, begidx, endidx):
-        sm = self._get_sm()
-        if not sm:
+        if not self.sm:
             return []
-        
-        settings = list(sm.settings.keys())
+
+        settings = list(self.sm.settings.keys())
         if not text:
             return settings
         return [s for s in settings if s.startswith(text)]
@@ -64,6 +43,8 @@ class Command(cmd.Cmd):
 
     def do_quit(self, arg):
         """
-        Quit TruckDevil
+        Quit TruckDevil immediately, regardless of the current module state.
+        Unlike 'back', which returns to the parent menu, 'quit' will exit
+        the entire TruckDevil REPL immediately.
         """
         sys.exit("Exiting TruckDevil")

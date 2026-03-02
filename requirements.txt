@@ -3,4 +3,4 @@ python-can>=4.0
 dill>=0.3.4
 setuptools>=57.0.0
 pytest>=7.0
-pyreadline3>=3.4.1
+pyreadline3>=3.4.1; sys_platform == "win32"

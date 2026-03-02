@@ -65,6 +65,7 @@ class ReadCommands(Command):
         super().__init__()
         self.devil = J1939Interface(device)
         self.reader = Reader()
+        self.sm = self.reader.sm
 
     def do_save(self, arg):
         """
@@ -205,6 +206,15 @@ class ReadCommands(Command):
         Return to the main menu
         """
         return True
+
+    def complete_save(self, text, line, begidx, endidx):
+        import glob as g
+        if not text:
+            return g.glob('*')
+        return g.glob(text + '*')
+
+    def complete_load(self, text, line, begidx, endidx):
+        return self.complete_save(text, line, begidx, endidx)
 
     # TODO: add feature for viewing messages that have changed. Instead of scrolling, show a count and the bytes
     # that changed in the data between receives

@@ -1,5 +1,6 @@
 import cmd
 import importlib
+import os
 import sys
 from pkgutil import iter_modules
 
@@ -14,7 +15,6 @@ class FrameworkCommands(cmd.Cmd):
     def __init__(self):
         super().__init__()
         self._device = None
-        import os
         module_path = os.path.join(os.path.dirname(__file__), 'modules')
         self.module_names = [name for _, name, _ in iter_modules([module_path])]
 
@@ -114,26 +114,24 @@ class FrameworkCommands(cmd.Cmd):
 
     def do_quit(self, args):
         """
-        Quit TruckDevil
+        Quit TruckDevil immediately, regardless of the current module state.
+        Unlike 'back', which returns to the parent menu, 'quit' will exit
+        the entire TruckDevil REPL immediately.
         """
         sys.exit("Exiting TruckDevil")
             
     def complete_add_device(self, text, line, begidx, endidx):
-        # usage: add_device <interface> <channel> <can_baud> [serial_port]
         import can
-        # some common interfaces supported by python-can plus m2
-        # Use can.VALID_INTERFACES if available (newer python-can) or fall back to can.interface.VALID_INTERFACES (older python-can)
         interfaces = ['m2']
         if hasattr(can, 'VALID_INTERFACES'):
             interfaces.extend(can.VALID_INTERFACES)
         elif hasattr(can.interface, 'VALID_INTERFACES'):
             interfaces.extend(can.interface.VALID_INTERFACES)
-        
+
         interfaces = sorted(list(set(interfaces)))
-        
+
         parts = line[:begidx].split()
         if len(parts) == 1:
-            # Completing the interface name (first argument)
             if not text:
                 return interfaces
             return [i for i in interfaces if i.startswith(text)]
@@ -153,12 +151,6 @@ class FrameworkCommands(cmd.Cmd):
         return []
 
     def complete_use(self, text, line, begidx, endidx):
-        return self.complete_run_module(text, line, begidx, endidx)
-
-    def complete_list_modules(self, text, line, begidx, endidx):
-        return self.complete_run_module(text, line, begidx, endidx)
-
-    def complete_ls(self, text, line, begidx, endidx):
         return self.complete_run_module(text, line, begidx, endidx)
 
 if __name__ == "__main__":
