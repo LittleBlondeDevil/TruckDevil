@@ -282,15 +282,37 @@ def test_ecu_discovery_find_uds_smoke(truckdevil_module_env, shared_channel):
             old = sys.stdout
             try:
                 sys.stdout = buf
-                ecu_discovery.main_mod(["find_uds", "11", "back"], device)
+                ecu_discovery.main_mod(["find_uds", "dst=0x11", "back"], device)
             finally:
                 sys.stdout = old
         out = buf.getvalue()
-        assert (
-            "Scanning" in out
-            or "tester" in out.lower()
-            or "did not respond" in out.lower()
-        )
+        assert "Scanning UDS" in out or "No UDS responses" in out or "unique UDS-capable" in out
+    finally:
+        if device.can_bus is not None:
+            try:
+                device.can_bus.shutdown()
+            except Exception:
+                pass
+
+
+def test_ecu_discovery_find_uds_ranges(truckdevil_module_env, shared_channel):
+    """find_uds: test range parsing and message sending logic (smoke)."""
+    from truckdevil.libs.device import Device
+    import truckdevil.modules.ecu_discovery as ecu_discovery
+
+    device = Device("virtual", None, shared_channel, 250000)
+    try:
+        with patch("truckdevil.modules.ecu_discovery.time.sleep"):
+            buf = io.StringIO()
+            old = sys.stdout
+            try:
+                sys.stdout = buf
+                # Test complex ranges
+                ecu_discovery.main_mod(["find_uds", "dst=0x11-0x12", "src=0xf1,0xf2", "pri=0x18", "back"], device)
+            finally:
+                sys.stdout = old
+        out = buf.getvalue()
+        assert "Scanning UDS on destinations [17, 18] from sources [241, 242] with priorities [24]" in out
     finally:
         if device.can_bus is not None:
             try:

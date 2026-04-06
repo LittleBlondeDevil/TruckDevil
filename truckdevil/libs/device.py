@@ -19,9 +19,12 @@ class Device:
         self._device_type = device_type
         self._serial_port = serial_port
         self._channel = channel
-        self._can_baud = can_baud
+        self._can_baud = int(can_baud)
         self.device_lock = threading.RLock()
         self._acknowledged_flush = True
+        self._last_send_time = 0
+        self._min_delay = self._calculate_delay(self._can_baud)
+
         if device_type.lower() == "m2":
             if serial_port is None:
                 raise ValueError("If using M2, serial port must be specified")
@@ -32,9 +35,8 @@ class Device:
             self.init_m2(self._can_baud, self._channel)
             self._m2used = True
         else:
-            # TODO: test other devices
             self._can_bus = interface.Bus(
-                interface=device_type, channel=channel, bitrate=can_baud
+                interface=device_type, channel=channel, bitrate=self._can_baud
             )
             self._m2used = False
 
@@ -148,7 +150,18 @@ class Device:
             msg = self._can_bus.recv(timeout=timeout)
             return msg
 
+    def _calculate_delay(self, bitrate):
+        return max(0.005, 200.0 / bitrate) if bitrate > 0 else 0.010
+
     def send(self, msg: Message):
+        with self.device_lock:
+            # Enforce inter-message delay for rate limiting
+            now = time.time()
+            elapsed = now - self._last_send_time
+            if elapsed < self._min_delay:
+                time.sleep(self._min_delay - elapsed)
+            self._last_send_time = time.time()
+
         if self.m2_used:
             # convert from Message to $1CECFF000820120003FFCAFE00* format
             can_id = hex(msg.arbitration_id)[2:].zfill(8)
@@ -157,17 +170,24 @@ class Device:
             self.m2.write("${}{}{}*".format(can_id, dlc, data).encode("utf-8"))
         else:
             sleeptime = 0.0
+            max_backoff = 1.0 # Maximum 1 second backoff
             while True:
                 try:
                     self._can_bus.send(msg)
-                    time.sleep(sleeptime)
                     return
                 except can.CanOperationError as e:
+                    if "closed" in str(e).lower():
+                        print(f"error: {e} aborting send on closed bus.")
+                        return
                     if sleeptime == 0.0:
                         sleeptime = 0.001
                     else:
-                        sleeptime = sleeptime * 10
+                        sleeptime = min(sleeptime * 10, max_backoff)
                     print(f"error: {e} backing off delay to {sleeptime}")
+                    if sleeptime >= max_backoff:
+                        print(f"error: {e} maximum backoff reached, aborting.")
+                        return
+                    time.sleep(sleeptime)
                 except Exception as e:
                     print(f"error: {e} aborting.")
                     return

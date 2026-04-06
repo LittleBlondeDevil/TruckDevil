@@ -1559,7 +1559,7 @@ class J1939Message:
         if total_bytes is None:
             total_bytes = len(data) / 2
         self._can_id = can_id
-        self._data = data
+        self._data = data.upper()
         self._total_bytes = int(total_bytes)
         self._timestamp = 0
 

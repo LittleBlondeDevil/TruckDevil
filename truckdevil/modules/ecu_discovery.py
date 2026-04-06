@@ -1,6 +1,7 @@
 import copy
 import time
 import dill
+import shlex
 
 from truckdevil.j1939.j1939 import J1939Interface, J1939Message
 from truckdevil.libs.command import Command
@@ -239,54 +240,185 @@ class DiscoveryCommands(Command):
                 print(p)
 
     def do_find_uds(self, arg):  # noqa: C901
-        # TODO: add progress bar
         """
-        Provide the address of the ECU to determine if it responds to a UDS session.
-        Performs passive and active scanning techniques.
+        Scan for ECUs that support UDS (Unified Diagnostic Services).
+        Supports scanning ranges of destination addresses, source addresses, and priorities.
 
-        usage: find_uds <address>
+        usage: find_uds [dst=<range>] [src=<range>] [pri=<range>]
+
+        Defaults:
+            dst: All discovered ECUs (see active_scan)
+            src: 0xf1, 0xf2
+            pri: 0x18 (Priority 6)
+
+        Ranges can be:
+            Single value: 0x11
+            Dash range: 0x11-0x20
+            Comma list: 0x11,0x12,0x15
+
+        Example:
+            find_uds dst=0x11 src=0xf1-0xf2 pri=0x18,0x1c
         """
-        argv = arg.split()
-        if len(argv) == 0:
-            print("expected address, see 'help find_proprietary'")
+        def parse_range(range_str):
+            if not range_str:
+                return []
+            try:
+                if "," in range_str:
+                    return [input_to_int(x.strip()) for x in range_str.split(",")]
+                if "-" in range_str:
+                    parts = range_str.split("-")
+                    if len(parts) == 2:
+                        start, end = parts
+                        return list(range(input_to_int(start), input_to_int(end) + 1))
+                return [input_to_int(range_str)]
+            except ValueError:
+                return []
+
+        dst_list = self.ed.get_all_addresses()
+        src_list = [0xf1, 0xf2]
+        pri_list = [0x18]  # Default to 0x18 (Pri 6, RB 0, DP 0)
+
+        argv = shlex.split(arg)
+        if len(argv) > 0:
+            # Backward compatibility: if first arg is just an address and not a key=value
+            if "=" not in argv[0]:
+                dst_list = [input_to_int(argv[0])]
+                argv = argv[1:]
+
+            for a in argv:
+                if a.startswith("dst="):
+                    dst_list = parse_range(a[4:])
+                elif a.startswith("src="):
+                    src_list = parse_range(a[4:])
+                elif a.startswith("pri="):
+                    pri_list = parse_range(a[4:])
+
+        if not dst_list:
+            print("No destination addresses provided and none discovered. See 'active_scan' or provide 'dst='.")
             return
-        address = input_to_int(argv[0])
-        if address < 0 or address > 255:
-            print("address should be between 0-255.")
-            return
-        print("Scanning...")
-        self.devil.start_data_collection()
+
+        print(f"Scanning UDS on destinations {dst_list} from sources {src_list} with priorities {pri_list}...")
+
         uds_pdu_formats = [0xDA, 0xDB, 0xCD, 0xCE, 0xEF]
-        tester_present_request = "023E00FFFFFFFF"
-        msg = J1939Message(0x180000F9, tester_present_request)
-        msg.pdu_specific = address
-        messages_to_send = []
-        for f in uds_pdu_formats:
-            msg.pdu_format = f
-            for pri in range(0, 8):
-                for dp in range(0, 2):
-                    for rb in range(0, 2):
-                        msg.priority = pri
-                        msg.data_page_bit = dp
-                        msg.reserved_bit = rb
-                        messages_to_send.append(copy.copy(msg))
-        for m in messages_to_send:
-            self.devil.send_message(m)
-            time.sleep(0.5)
-        time.sleep(5)
-        messages = self.devil.stop_data_collection()
-        uniq_responses = []
+        uds_discovery_requests = ["023E00FFFFFFFF", "023E01FFFFFFFF", "013EFFFFFFFFFF", "021001FFFFFFFF"]
+
+        self.devil.start_data_collection()
+        messages = []
+        try:
+            total_msgs = len(dst_list) * len(src_list) * len(pri_list) * len(uds_pdu_formats) * len(uds_discovery_requests)
+            sent_count = 0
+
+            for dst in dst_list:
+                for src in src_list:
+                    for pri_val in pri_list:
+                        priority = (pri_val >> 2) & 0x07
+                        reserved = (pri_val >> 1) & 0x01
+                        data_page = pri_val & 0x01
+
+                        for f in uds_pdu_formats:
+                            for req in uds_discovery_requests:
+                                msg = J1939Message(0, req)
+                                msg.src_addr = src
+                                msg.pdu_specific = dst
+                                msg.pdu_format = f
+                                msg.priority = priority
+                                msg.reserved_bit = reserved
+                                msg.data_page_bit = data_page
+
+                                self.devil.send_message(msg)
+                                sent_count += 1
+                                if sent_count % 10 == 0:
+                                    print(f"Sent {sent_count}/{total_msgs} requests...")
+
+            print(f"\nSent {sent_count} requests. Waiting for responses...")
+            time.sleep(2)
+        finally:
+            messages = self.devil.stop_data_collection()
+
+        uniq_responses = {} # key: (dst_addr, pdu_format) -> value: {srcs: set, pris: set}
         for m in messages:
-            if m.pdu_format in uds_pdu_formats:
-                if m.pdu_format == 0xEF and "027E" not in m.data:
-                    continue
-                if m.can_id not in [rsp.can_id for rsp in uniq_responses]:
-                    uniq_responses.append(m)
-        if len(uniq_responses) == 0:
-            print("ECU did not respond to any tester present requests.")
+            # Check if it's a response to one of our requests
+            # Destination of response should be one of our sources
+            if m.pdu_specific in src_list:
+                # Format should be one of the UDS formats
+                if m.pdu_format in uds_pdu_formats:
+                    data = m.data
+                    # Treat 7E PR, 50 PR, 7F NR, and 0xEF with 027E as confirmation
+                    is_uds_pr = len(data) >= 4 and (data[2:4] == "7E" or data[2:4] == "50")
+                    is_uds_nr = len(data) >= 6 and data[2:4] == "7F"
+                    is_uds_ef = m.pdu_format == 0xEF and "027E" in data
+
+                    if is_uds_pr or is_uds_nr or is_uds_ef:
+                        key = (m.src_addr, m.pdu_format)
+                        if key not in uniq_responses:
+                            uniq_responses[key] = {"srcs": set(), "pris": set()}
+                        # The working src/pri for THIS endpoint was the pdu_specific/priority of our request
+                        # but we don't have the original request here easily.
+                        # Wait, the response m.pdu_specific IS the src_addr we used in the request.
+                        # The response m.priority IS likely the same priority as the request.
+                        uniq_responses[key]["srcs"].add(m.pdu_specific)
+                        uniq_responses[key]["pris"].add(m.priority)
+
+        if not uniq_responses:
+            print("No UDS responses detected.")
         else:
-            for u in uniq_responses:
-                print("Tester present responses: \n{}".format(u))
+            import textwrap
+            from j1939.j1939 import j1939_fields_to_can_id
+
+            def format_range(s):
+                if not s: return "-"
+                l = sorted(list(s))
+                if len(l) <= 3:
+                    return ", ".join([f"0x{x:02x}" for x in l])
+                return f"0x{l[0]:02x}-0x{l[-1]:02x}"
+
+            # Table configuration
+            max_width = 110
+            addr_width = 8
+            fmt_width = 6
+            srcs_width = 15
+            pris_width = 10
+            ids_width = max_width - (addr_width + fmt_width + srcs_width + pris_width) - 12
+
+            header = f"{'Target':<{addr_width}} | {'Fmt':<{fmt_width}} | {'Working Srcs':<{srcs_width}} | {'Pris':<{pris_width}} | {'Suggested Send/Recv IDs'}"
+            sep = "-" * max_width
+            print("\nDiscovered UDS-capable endpoints:")
+            print(sep)
+            print(header)
+            print(sep)
+
+            for (addr, fmt), info in uniq_responses.items():
+                src_str = format_range(info["srcs"])
+                pri_str = format_range(info["pris"])
+                
+                # Suggest IDs
+                # We pick the first working src and priority
+                best_src = sorted(list(info["srcs"]))[0]
+                best_pri = sorted(list(info["pris"]))[0]
+                
+                # Request: Pri=best_pri, Res=0, DP=0, PF=fmt, PS=addr, SA=best_src
+                req_id = j1939_fields_to_can_id(best_pri, 0, 0, fmt, addr, best_src)
+                # Response: Pri=best_pri, Res=0, DP=0, PF=fmt, PS=best_src, SA=addr
+                res_id = j1939_fields_to_can_id(best_pri, 0, 0, fmt, best_src, addr)
+                
+                ids_str = f"S: 0x{req_id:08X} / R: 0x{res_id:08X}"
+                
+                # Wrapping
+                addr_wrapped = textwrap.wrap(f"0x{addr:02x}", width=addr_width)
+                fmt_wrapped = textwrap.wrap(f"0x{fmt:02x}", width=fmt_width)
+                srcs_wrapped = textwrap.wrap(src_str, width=srcs_width)
+                pris_wrapped = textwrap.wrap(pri_str, width=pris_width)
+                ids_wrapped = textwrap.wrap(ids_str, width=ids_width)
+
+                num_lines = max(len(addr_wrapped), len(fmt_wrapped), len(srcs_wrapped), len(pris_wrapped), len(ids_wrapped))
+                for i in range(num_lines):
+                    a = addr_wrapped[i] if i < len(addr_wrapped) else ""
+                    f = fmt_wrapped[i] if i < len(fmt_wrapped) else ""
+                    s = srcs_wrapped[i] if i < len(srcs_wrapped) else ""
+                    p = pris_wrapped[i] if i < len(pris_wrapped) else ""
+                    d = ids_wrapped[i] if i < len(ids_wrapped) else ""
+                    print(f"{a:<{addr_width}} | {f:<{fmt_width}} | {s:<{srcs_width}} | {p:<{pris_width}} | {d}")
+                print(sep)
 
     def do_request_pgn(self, arg):
         """

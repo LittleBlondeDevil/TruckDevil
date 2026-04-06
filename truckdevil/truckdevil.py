@@ -200,7 +200,11 @@ class FrameworkCommands(Command):
             return
         interface = argv[0]
         channel = argv[1]
-        can_baud = argv[2]
+        try:
+            can_baud = int(argv[2])
+        except ValueError:
+            print("Error: can_baud must be an integer")
+            return
         serial_port = None
         if len(argv) >= 4:
             serial_port = argv[3]
