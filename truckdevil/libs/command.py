@@ -50,9 +50,15 @@ class Command:
         Subclasses should override this and call super().get_completion_dict()
         to preserve base completions like settings.
         """
-        completions = {cmd: None for cmd in self.get_commands()}
+        cmds = self.get_commands()
+        completions = {cmd: None for cmd in cmds}
+
+        # Tab-completion for help <command>
+        if 'help' in completions:
+            completions['help'] = {cmd: None for cmd in cmds if cmd != 'help'}
 
         # Integrate SettingsManager if present
+
         if self.sm:
             settings_dict = {s: None for s in self.sm.settings.keys()}
             if 'set' in completions:
