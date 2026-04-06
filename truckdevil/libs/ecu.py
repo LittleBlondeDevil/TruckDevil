@@ -64,9 +64,6 @@ class ECU:
         if self.name is not None:
             name_from_claimed = self.name
             
-        res = "address: 0x{:02x}: {} ({})   NAME: {}".format(
+        return "address: 0x{:02x}: {} ({})   NAME: {}".format(
             self.address, name_from_db, self.address, name_from_claimed
         )
-        if self.name_decoded:
-            res += "\n" + str(self.name_decoded)
-        return res
