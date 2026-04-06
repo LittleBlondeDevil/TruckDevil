@@ -30,5 +30,8 @@ def test_j1939_name_str():
     # Verify it doesn't crash and returns a string
     name = J1939Name(0x8000000000000000)
     s = str(name)
-    assert "Arbitrary Address Capable: 1" in s
+    assert "Arbitrary Address Capable: Yes" in s
     assert "Industry Group:            0" in s
+
+    name_no = J1939Name(0x0000000000000000)
+    assert "Arbitrary Address Capable: No" in str(name_no)

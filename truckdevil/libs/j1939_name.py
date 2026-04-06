@@ -83,10 +83,11 @@ class J1939Name:
         vs = self.get_vehicle_system_name()
         func = self.get_function_name()
         mfg = self.get_manufacturer_name()
+        aac_str = "Yes" if self.arbitrary_address_capable else "No"
         
         lines = [
             f"NAME: 0x{self.name_int:016x}",
-            f"  Arbitrary Address Capable: {self.arbitrary_address_capable}",
+            f"  Arbitrary Address Capable: {aac_str}",
             f"  Industry Group:            {self.industry_group} ({ig})",
             f"  Vehicle System Instance:   {self.vehicle_system_instance}",
             f"  Vehicle System:            {self.vehicle_system} ({vs})",
