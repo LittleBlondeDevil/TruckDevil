@@ -2,10 +2,36 @@ import copy
 import time
 import dill
 import shlex
+import json
+import os
 
 from truckdevil.j1939.j1939 import J1939Interface, J1939Message
 from truckdevil.libs.command import Command
 from truckdevil.libs.ecu import ECU
+
+
+def get_ecu_name(address: int) -> str:
+    """
+    Look up the default ECU name from the J1939 database.
+    """
+    try:
+        # Construct path to the json file
+        base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        json_path = os.path.join(base_path, "resources", "json_files", "src_addr_list.json")
+        with open(json_path, "r") as f:
+            addr_list = json.load(f)
+            return addr_list.get(str(address), "Unknown")
+    except Exception:
+        return "Unknown"
+
+
+def format_ecu_address(address: int) -> str:
+    """
+    Format ECU address as: 0x<hex>: <name> (<decimal>)
+    Example: 0x0b: Brake System Controller (11)
+    """
+    name = get_ecu_name(address)
+    return "0x{:02x}: {} ({})".format(address, name, address)
 
 
 def input_to_int(in_str: str) -> int:
@@ -184,9 +210,9 @@ class DiscoveryCommands(Command):
                 reboot_message = m
                 break
         if reboot_message is None:
-            print("no messages detected for ECU {}.".format(address))
+            print("no messages detected for ECU {}.".format(format_ecu_address(address)))
         else:
-            print("reboot message for ECU {}: \n{}".format(address, reboot_message))
+            print("reboot message for ECU {}: \n{}".format(format_ecu_address(address), reboot_message))
 
     def do_find_proprietary(self, arg):  # noqa: C901
         """
@@ -227,7 +253,7 @@ class DiscoveryCommands(Command):
                     self.ed.add_known_ecu(e)
                 e.add_prop_message(m)
         if e is None:
-            print("no proprietary messages found for address {}.".format(address))
+            print("no proprietary messages found for address {}.".format(format_ecu_address(address)))
             return
         discovered = len(e.prop_messages) - num_prop_messages
         if discovered > 0:
@@ -235,7 +261,7 @@ class DiscoveryCommands(Command):
         else:
             print("no additional proprietary messages found.")
         if len(e.prop_messages) > 0:
-            print("Proprietary messages for address {}:".format(address))
+            print("Proprietary messages for address {}:".format(format_ecu_address(address)))
             for p in e.prop_messages:
                 print(p)
 
@@ -441,7 +467,7 @@ class DiscoveryCommands(Command):
         if pgn < 0 or pgn > 0x01FFFF:
             print("pgn should be between 0x0 - 0x1FFFF")
             return
-        print("requesting {} from {}...".format(pgn, address))
+        print("requesting {} from {}...".format(pgn, format_ecu_address(address)))
         pgn_data = "{0:06x}".format(pgn)
         pgn_data = pgn_data[4:6] + pgn_data[2:4] + pgn_data[0:2]
         self.devil.start_data_collection()
