@@ -790,15 +790,17 @@ class J1939Interface:
                 self.pgn_list[str(message.pgn)]["pgnDataLength"]
                 == len(message.data) / 2
             ):
+                industry_group = None
                 # For each spn that is part the given pgn
                 for spn in self.pgn_list[str(message.pgn)]["spnList"]:
                     # Only include this portion if the spn is in the spn_list
                     if str(spn) in self.spn_list:
+                        spn_name = self.spn_list[str(spn)]['spnName']
                         decoded += (
                             "      SPN("
                             + str(spn)
                             + "): "
-                            + self.spn_list[str(spn)]["spnName"]
+                            + spn_name
                             + "\n"
                         )
                         # Ensure it's not a variable length SPN
@@ -822,6 +824,9 @@ class J1939Interface:
                                 # print(f'mask: {mask:d}')
                                 extracted_data = (dbyte >> start_bit) & mask
                                 # print(f'extracted_data: {extracted_data:d}')
+                            
+                            if str(spn) == "2846":
+                                industry_group = extracted_data
 
                             if 8 < total_bits <= 16:  # (2 bytes)
                                 extracted_data = int.from_bytes(
@@ -870,13 +875,21 @@ class J1939Interface:
                                     self.spn_list[str(spn)]["units"] == "bit"
                                     and str(spn) in self.bit_decoding_list
                                 ):
+                                    # Handle Industry Group dependent SPNs (Vehicle System and Function)
+                                    # SPN 2842 is Vehicle System, SPN 2841 is Function
+                                    if message.pgn == 60928 and (str(spn) == "2842" or str(spn) == "2841"):
+                                        if industry_group == 0 or industry_group == 1:
+                                            label = self.bit_decoding_list[str(spn)][str(int(bin_data, 2))]
+                                        else:
+                                            label = "Industry group specific"
+                                    else:
+                                        label = self.bit_decoding_list[str(spn)][str(int(bin_data, 2))]
+
                                     decoded += (
                                         "        "
                                         + str(int(bin_data, 2))
                                         + " : "
-                                        + self.bit_decoding_list[str(spn)][
-                                            str(int(bin_data, 2))
-                                        ]
+                                        + label
                                         + "\n"
                                     )
                                 # if ascii data type, convert
