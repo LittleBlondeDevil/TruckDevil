@@ -125,16 +125,53 @@ class DiscoveryCommands(Command):
         if len(self.ed.get_all_addresses()) == 0:
             print("no ecu information stored. See the passive_scan command.")
             return
-        for ecu in self.ed.known_ecus:
-            print(ecu)
-            if self.sm.name_details and ecu.name_decoded:
-                decoded_str = str(ecu.name_decoded)
-                # Indent each line
-                indented = "\n".join("    " + line for line in decoded_str.split("\n"))
-                print(indented)
+
+        import textwrap
         
+        # Table configuration
+        max_width = 100
+        addr_width = 10
+        db_name_width = 20
+        name_id_width = max_width - addr_width - db_name_width - 6 # 6 for separators "| " and " | "
+
+        header = f"{'address':<{addr_width}} | {'DB Name':<{db_name_width}} | {'unique 64-bit NAME ID':<{name_id_width}}"
+        sep = "-" * max_width
+        print(sep)
+        print(header)
+        print(sep)
+
+        for ecu in self.ed.known_ecus:
+            addr_str = f"0x{ecu.address:02x}"
+            db_name = get_ecu_name(ecu.address)
+            
+            # Prepare the NAME ID column content
+            name_id_content = "unknown"
+            if ecu.name is not None:
+                name_id_content = ecu.name
+                if self.sm.name_details and ecu.name_decoded:
+                    name_id_content += "\n" + str(ecu.name_decoded)
+            
+            # Wrap each piece of content
+            addr_wrapped = textwrap.wrap(addr_str, width=addr_width)
+            db_name_wrapped = textwrap.wrap(db_name, width=db_name_width)
+            name_id_wrapped = []
+            # For NAME ID, we want to preserve internal newlines (from decoded info)
+            for part in name_id_content.split('\n'):
+                name_id_wrapped.extend(textwrap.wrap(part, width=name_id_width))
+
+            # Print the wrapped rows
+            num_lines = max(len(addr_wrapped), len(db_name_wrapped), len(name_id_wrapped))
+            for i in range(num_lines):
+                a = addr_wrapped[i] if i < len(addr_wrapped) else ""
+                d = db_name_wrapped[i] if i < len(db_name_wrapped) else ""
+                n = name_id_wrapped[i] if i < len(name_id_wrapped) else ""
+                print(f"{a:<{addr_width}} | {d:<{db_name_width}} | {n:<{name_id_width}}")
+            print(sep)
+
         if not self.sm.name_details:
             print("\n(use set name_details True to see NAME decodes)")
+        
+        print("\nNote: Run active_scan to attempt to fill-out unknown NAME fields.")
 
     def do_passive_scan(self, arg):
         """
