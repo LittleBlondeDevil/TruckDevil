@@ -16,6 +16,7 @@ dependencies = [
   "pyserial>=3.5",
   "python-can>=4.0",
   "dill>=0.3.4",
+  "prompt_toolkit>=3.0.0",
   "pyreadline3>=3.4.1; sys_platform == 'win32'",
 ]
 classifiers = [

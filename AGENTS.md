@@ -18,8 +18,8 @@ Guidance for coding agents working in `TruckDevil/`.
 - `tests/`: pytest suite, mostly using python-can virtual interfaces
 
 ## Python Versions
-- CI runs on Python `3.9`, `3.10`, `3.11`, `3.12`, `3.13`, and `3.14`
-- Prefer Python `3.9`-`3.14` locally
+- CI runs on Python `3.10`, `3.11`, `3.12`, `3.13`, and `3.14`
+- Prefer Python `3.10`-`3.14` locally
 - Python `3.13` and `3.14` are covered by CI, but still verify behavior when changing version-sensitive packaging or dependency setup
 
 ## Environment Setup
