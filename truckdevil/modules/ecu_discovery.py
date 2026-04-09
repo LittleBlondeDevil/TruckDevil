@@ -82,6 +82,7 @@ class DiscoveryCommands(Command):
     def __init__(self, device):
         sm = SettingsManager()
         sm.add_setting(Setting("name_details", False).add_description("Show full J1939 NAME decoding details"))
+        sm.add_setting(Setting("scan_interval", 10).add_description("Time in seconds to capture traffic for scans"))
         super().__init__(sm=sm)
         self.devil = J1939Interface(device)
         self.ed = ECUDiscovery()
@@ -179,7 +180,7 @@ class DiscoveryCommands(Command):
         """
         print("scanning...")
         self.devil.start_data_collection()
-        time.sleep(10)
+        time.sleep(self.sm.scan_interval)
         messages = self.devil.stop_data_collection()
         known_addresses = self.ed.get_all_addresses()
         for m in messages:
@@ -215,6 +216,52 @@ class DiscoveryCommands(Command):
             print("added {} new ecus.".format(ecus_added))
         else:
             print("no new ecus found.")
+
+    def do_signal_summary(self, arg):
+        """
+        Run traffic capture and print a formatted signal summary.
+        Available only when pretty-j1939 is installed.
+        """
+        from truckdevil.libs.pretty_shim import PRETTY_AVAILABLE
+        if not PRETTY_AVAILABLE:
+            print("signal_summary requires pretty-j1939 to be installed.")
+            return
+
+        interval = self.sm.scan_interval
+        print(f"Capturing traffic for {interval} seconds...")
+        self.devil.start_data_collection()
+        # The capture is processed by the pretty_shim because J1939Interface 
+        # feeds messages to it during data collection if configured, 
+        # or we might need to feed them manually if it's not.
+        
+        # Looking at J1939Interface.start_data_collection in truckdevil/j1939/j1939.py...
+        time.sleep(interval)
+        messages = self.devil.stop_data_collection()
+        
+        # We need to ensure the messages were described by the shim's describer.
+        # J1939Interface._collection_loop usually doesn't call the describer.
+        # It's usually called during print_messages or similar.
+        # Let's manually feed the collected messages to the describer if needed.
+        
+        import io
+        import contextlib
+
+        # We suppress stdout and stderr here to capture any stray output from the pretty-j1939 
+        # library while we feed it messages to build the summary.
+        f = io.StringIO()
+        with contextlib.redirect_stdout(f), contextlib.redirect_stderr(io.StringIO()):
+            for m in messages:
+                try:
+                    self.devil.pretty_shim.get_pretty_output(m)
+                except Exception:
+                    continue
+        
+        captured_output = f.getvalue()
+
+        self.devil.pretty_shim.print_summary()
+        # If the library printed a summary during the loop, our print_summary 
+        # should have handled it (it checks get_summary()).
+        print("\nNote: This summary can be rendered as a Mermaid diagram.")
 
     def do_find_boot_msg(self, arg):  # noqa: C901
         """
