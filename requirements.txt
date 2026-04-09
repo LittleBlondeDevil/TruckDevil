@@ -3,5 +3,7 @@ python-can>=4.0.0
 dill
 pyserial>=3.5
 bitstring
+pytest
+pytest-cov
 # pretty_j1939 is an optional but recommended dependency
 # pretty_j1939
