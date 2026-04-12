@@ -256,7 +256,7 @@ class J1939Interface:
                 try:
                     # Get the pretty message and print it
                     output = self.pretty_shim.get_pretty_output(j1939_message)
-                    print(output)
+                    self.pretty_shim.print_ansi(output)
                 except Exception as e:
                     # Print the error if unable to pretty print the message
                     print(f"error pretty printing message: {e}")

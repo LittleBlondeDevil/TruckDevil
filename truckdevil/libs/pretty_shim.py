@@ -213,18 +213,23 @@ class PrettyShim:
         except Exception as e:
             return f"Error pretty printing: {e}"
 
+    @staticmethod
+    def print_ansi(text):
+        """
+        Prints text containing ANSI escape sequences using prompt_toolkit
+        if available, falling back to standard print.
+        """
+        try:
+            from prompt_toolkit.shortcuts import print_formatted_text
+            from prompt_toolkit.formatted_text import ANSI
+
+            print_formatted_text(ANSI(text))
+        except ImportError:
+            print(text)
+
     def print_summary(self):
         if not self.describer or not self.renderer:
             return
-
-        def print_ansi(text):
-            try:
-                from prompt_toolkit.shortcuts import print_formatted_text
-                from prompt_toolkit.formatted_text import ANSI
-
-                print_formatted_text(ANSI(text))
-            except ImportError:
-                print(text)
 
         try:
             summary_data = self.describer.get_summary()
@@ -242,7 +247,7 @@ class PrettyShim:
 
             # If the summary contains a Mermaid graph, it might already be formatted if self.indent is True
             if isinstance(summary_data, dict) and "Summary" in summary_data:
-                print_ansi(summary_data["Summary"])
+                self.print_ansi(summary_data["Summary"])
             else:
                 rendered = self.renderer.render_summary(summary_data, indent=self.indent)
 
@@ -259,9 +264,9 @@ class PrettyShim:
                     mermaid_colored = extract_original_segment(
                         stripped_rendered, clean_stripped, start_clean, end_clean
                     )
-                    print_ansi(mermaid_colored)
+                    self.print_ansi(mermaid_colored)
                     return
 
-                print_ansi(rendered)
+                self.print_ansi(rendered)
         except Exception as e:
             print(f"Error printing summary: {e}")
