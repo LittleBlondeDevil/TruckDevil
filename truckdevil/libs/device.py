@@ -145,8 +145,8 @@ class Device:
             sleeptime = 0.0
             while True:
                 try:
-                    self._can_bus.send(msg)
                     time.sleep(sleeptime)
+                    self._can_bus.send(msg)
                     return
                 except can.CanOperationError as e:
                     if sleeptime == 0.0:
