@@ -6,6 +6,9 @@ import threading
 
 
 class Device:
+    DEFAULT_MAX_RETRIES = 10
+    DEFAULT_MAX_BACKOFF = 1.0
+
     def __init__(self, device_type="m2", serial_port=None, channel='can0', can_baud=0):
         """
         Defines a new hardware device
@@ -134,7 +137,7 @@ class Device:
             msg = self._can_bus.recv(timeout=timeout)
             return msg
 
-    def send(self, msg: Message):
+    def send(self, msg: Message, max_retries: int = DEFAULT_MAX_RETRIES, max_backoff: float = DEFAULT_MAX_BACKOFF):
         if self.m2_used:
             # convert from Message to $1CECFF000820120003FFCAFE00* format
             can_id = hex(msg.arbitration_id)[2:].zfill(8)
@@ -143,16 +146,23 @@ class Device:
             self.m2.write("${}{}{}*".format(can_id, dlc, data).encode('utf-8'))
         else:
             sleeptime = 0.0
+            retries = 0
             while True:
                 try:
                     time.sleep(sleeptime)
                     self._can_bus.send(msg)
                     return
                 except can.CanOperationError as e:
+                    retries += 1
+                    if max_retries is not None and retries > max_retries:
+                        print(f'error: {e} max retries ({max_retries}) exceeded, aborting.')
+                        return
                     if sleeptime == 0.0:
                         sleeptime = 0.001
                     else:
                         sleeptime = sleeptime * 10
+                    if max_backoff is not None:
+                        sleeptime = min(sleeptime, max_backoff)
                     print(f'error: {e} backing off delay to {sleeptime}')
                 except Exception as e:
                     print(f'error: {e} aborting.')
