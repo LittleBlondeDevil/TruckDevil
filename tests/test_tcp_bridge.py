@@ -74,12 +74,28 @@ def test_tcp_decode_invalid_frames():
     assert tcp_mod.decode("ZZZ02AABB") is None
     # Standard ID > 0x7FF
     assert tcp_mod.decode("80002AABB") is None
+    # Extended ID > 0x1FFFFFFF (29-bit CAN max)
+    assert tcp_mod.decode("2000000002AABB") is None
+    assert tcp_mod.decode("FFFFFFFF02AABB") is None
     # Invalid DLC
     assert tcp_mod.decode("12309010203040506070809") is None
     # Data length mismatch
     assert tcp_mod.decode("12302AA") is None
     # Invalid hex data
     assert tcp_mod.decode("12302ZZ") is None
+
+
+def test_tcp_iface_whitelist_pattern():
+    """IFACE_PATTERN allows can0/can1/vcan0 but disallows dangerous interfaces."""
+    tcp_mod = _load_tcp_module()
+    assert tcp_mod.IFACE_PATTERN.match("can0")
+    assert tcp_mod.IFACE_PATTERN.match("can1")
+    assert tcp_mod.IFACE_PATTERN.match("vcan0")
+    assert tcp_mod.IFACE_PATTERN.match("vcan99")
+    assert not tcp_mod.IFACE_PATTERN.match("eth0")
+    assert not tcp_mod.IFACE_PATTERN.match("lo")
+    assert not tcp_mod.IFACE_PATTERN.match("wlan0")
+    assert not tcp_mod.IFACE_PATTERN.match(";rm -rf /")
 
 
 def test_tcp_parse_args(monkeypatch):
