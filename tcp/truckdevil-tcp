@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import logging
+import re
 import socket
 import select
 import subprocess
@@ -8,6 +9,11 @@ from typing import Optional
 import can
 
 logger = logging.getLogger(__name__)
+
+# Interface whitelist pattern (e.g., can0, can1, vcan0)
+IFACE_PATTERN = re.compile(r"^(can|vcan)\d+$")
+MAX_TCP_INBUF_BYTES = 65536
+
 
 def can_setup(iface: str, baud: int) -> bool:
     """Bring down 'iface', then bring it up at 'baud' (or 250k if baud=0). This needs root privs."""
@@ -26,6 +32,7 @@ def can_setup(iface: str, baud: int) -> bool:
 
     logger.info("Interface '%s' is up at %d bps.", iface, baud)
     return True
+
 
 def encode(msg: can.Message) -> str:
     """
@@ -46,11 +53,14 @@ def encode(msg: can.Message) -> str:
 
     return out + "*"
 
+
 def decode(m2str: str) -> Optional[can.Message]:
     """
     Decode an M2 string (excluding '$' and '*') into a python-can Message.
     If >=10 hex => extended (8 hex ID), else standard (3 hex ID).
     Returns None on parse error.
+    Note: M2 wire format standard frames from TruckDevil always send 8 hex digits
+    (zero-padded), so they are parsed as extended-width frames with high bits cleared.
     """
     length = len(m2str)
     if length < 5:  # minimum = 3 (ID) + 2 (DLC) = 5
@@ -70,6 +80,8 @@ def decode(m2str: str) -> Optional[can.Message]:
 
     if not is_extended and can_id > 0x7FF:
         return None  # invalid standard ID
+    if is_extended and can_id > 0x1FFFFFFF:
+        return None  # invalid extended 29-bit ID
 
     # DLC
     dlc_str = m2str[id_len:id_len+2]
@@ -95,6 +107,7 @@ def decode(m2str: str) -> Optional[can.Message]:
                        data=data,
                        is_rx=False)
 
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Bridge a SocketCAN interface <-> M2-over-TCP.")
@@ -103,6 +116,7 @@ def parse_args():
     parser.add_argument("-v", "--verbose", action="count", default=0,
                         help="Increase verbosity (-v for INFO, -vv for DEBUG)")
     return parser.parse_args()
+
 
 def main():
     args = parse_args()
@@ -155,7 +169,12 @@ def main():
         return
 
     baud_str = init_data[:7].decode('ascii', errors='replace')
-    iface_str = init_data[7:].decode('ascii', errors='replace')
+    iface_str = init_data[7:].decode('ascii', errors='replace').strip()
+
+    if not IFACE_PATTERN.match(iface_str):
+        logger.error("Invalid CAN interface requested: '%s'. Must match %s", iface_str, IFACE_PATTERN.pattern)
+        cli_sock.close()
+        return
 
     try:
         can_baud = int(baud_str)
@@ -202,8 +221,9 @@ def main():
                 logger.info("Client disconnected.")
                 break
 
-        # select for non-blocking recv
-        rlist, _, _ = select.select([cli_sock], [], [], 0.01)
+        # select for non-blocking recv; don't wait if a CAN message was just processed
+        select_timeout = 0.0 if msg else 0.01
+        rlist, _, _ = select.select([cli_sock], [], [], select_timeout)
         if cli_sock in rlist:
             try:
                 chunk = cli_sock.recv(4096)
@@ -213,6 +233,21 @@ def main():
                 tcp_inbuf += chunk.decode('utf-8', errors='replace')
             except BlockingIOError:
                 pass
+
+        # trim leading junk if no '$' at start, or if buffer is getting too large
+        start_pos = tcp_inbuf.find('$')
+        if start_pos > 0:
+            tcp_inbuf = tcp_inbuf[start_pos:]
+        elif start_pos < 0 and len(tcp_inbuf) > 0:
+            tcp_inbuf = ""
+
+        if len(tcp_inbuf) > MAX_TCP_INBUF_BYTES:
+            logger.warning("tcp_inbuf exceeded %d bytes; trimming buffer", MAX_TCP_INBUF_BYTES)
+            last_start = tcp_inbuf.rfind('$')
+            if last_start >= 0:
+                tcp_inbuf = tcp_inbuf[last_start:]
+            else:
+                tcp_inbuf = ""
 
         # parse $...* from tcp_inbuf
         while True:

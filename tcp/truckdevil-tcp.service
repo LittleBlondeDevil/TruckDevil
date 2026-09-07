@@ -1,12 +1,16 @@
-# change the ip and port if needed
+# Change the bind IP and port if remote network access is needed.
+# WARNING: By default this binds to localhost (127.0.0.1). Binding to 0.0.0.0 or a public
+# interface exposes the CAN bus bridge without authentication. Ensure proper firewall/network
+# controls are in place before exposing to external interfaces.
 [Unit]
 Description=TCP M2 Encoder Router
 After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/truckdevil-tcp -v 0.0.0.0 1234
-Restart=on-failure
+ExecStart=/usr/bin/truckdevil-tcp -v 127.0.0.1 1234
+Restart=always
+RestartSec=3
 User=root
 
 [Install]
