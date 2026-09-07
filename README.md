@@ -16,7 +16,7 @@ However, python-can is used so any [supported CAN interface](https://python-can.
 
 Additional software is required to flash the m2_sketch firmware to the M2, if used (see Installation).
 
-If you would like to read J1939 messages remotely, a TCP socket server can be set up to bridge M2 encoded messages to a remote client also running TruckDevil (see [Remote Socket Server](#remote-socket-server)).
+If you would like to read J1939 messages remotely, a TCP socket server can be set up to bridge M2 encoded messages to a remote client also running TruckDevil (see [Remote Socket Server](#remote-socket-server--client-sessions)).
 
 ## Installation
 
@@ -332,7 +332,7 @@ options:
 ./tcp/truckdevil-tcp -v 0.0.0.0 1234
 ```
 
-*Note: Running `truckdevil-tcp` requires privileges to manage CAN network links if the CAN interface is down (root or `CAP_NET_ADMIN`).*
+*Note: Running `truckdevil-tcp` requires privileges to manage CAN network links (root or `CAP_NET_ADMIN`).*
 
 ##### Running as a Systemd service:
 A template unit file is provided at [`tcp/truckdevil-tcp.service`](tcp/truckdevil-tcp.service). To install and enable it:
