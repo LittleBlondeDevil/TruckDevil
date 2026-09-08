@@ -120,6 +120,93 @@ def test_cli_add_device_list_device(truckdevil_module_env, shared_channel):
             pass
 
 
+def test_cli_add_device_tcp(monkeypatch, truckdevil_module_env):
+    """add_device m2:<ip> can0 500000 1234 sets up TCP device."""
+    import socket
+
+    class MockSocket:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def setsockopt(self, *args, **kwargs):
+            pass
+
+        def connect(self, addr):
+            pass
+
+        def sendall(self, data):
+            pass
+
+    monkeypatch.setattr(socket, "socket", MockSocket)
+    FrameworkCommands = _load_framework_commands()
+    fc = FrameworkCommands()
+    fc.onecmd("add_device m2:192.168.7.2 can0 500000 1234")
+    assert fc.device is not None
+    assert fc.device.m2_used is True
+    assert "192.168.7.2" in str(fc.device)
+
+
+def test_cli_add_device_invalid_ip(truckdevil_module_env):
+    """add_device with malformed IP prints error."""
+    FrameworkCommands = _load_framework_commands()
+    fc = FrameworkCommands()
+    buf = __import__("io").StringIO()
+    old = sys.stdout
+    try:
+        sys.stdout = buf
+        fc.onecmd("add_device m2:999.999.999.999 can0 500000 1234")
+    finally:
+        sys.stdout = old
+    assert "Error: invalid IP address" in buf.getvalue()
+
+
+def test_cli_list_device_when_none(truckdevil_module_env):
+    """list_device prints 'No device configured.' when device is None."""
+    FrameworkCommands = _load_framework_commands()
+    fc = FrameworkCommands()
+    buf = __import__("io").StringIO()
+    old = sys.stdout
+    try:
+        sys.stdout = buf
+        fc.onecmd("list_device")
+    finally:
+        sys.stdout = old
+    assert "No device configured." in buf.getvalue()
+
+
+def test_cli_list_device_tcp(monkeypatch, truckdevil_module_env):
+    """list_device prints TCP IP and Port for TCP M2 device."""
+    import socket
+
+    class MockSocket:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def setsockopt(self, *args, **kwargs):
+            pass
+
+        def connect(self, addr):
+            pass
+
+        def sendall(self, data):
+            pass
+
+    monkeypatch.setattr(socket, "socket", MockSocket)
+    FrameworkCommands = _load_framework_commands()
+    fc = FrameworkCommands()
+    fc.onecmd("add_device m2:10.0.0.50 can0 250000 9000")
+    buf = __import__("io").StringIO()
+    old = sys.stdout
+    try:
+        sys.stdout = buf
+        fc.onecmd("list_device")
+    finally:
+        sys.stdout = old
+    out = buf.getvalue()
+    assert "TCP IP: 10.0.0.50" in out
+    assert "Port: 9000" in out
+
+
 def test_cli_run_module_read_messages(truckdevil_module_env, shared_channel):
     """run_module read_messages with args (set, settings, back); no blocking on print_messages."""
     FrameworkCommands = _load_framework_commands()

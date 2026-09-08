@@ -16,6 +16,8 @@ However, python-can is used so any [supported CAN interface](https://python-can.
 
 Additional software is required to flash the m2_sketch firmware to the M2, if used (see Installation).
 
+If you would like to read J1939 messages remotely, a TCP socket server can be set up to bridge M2 encoded messages to a remote client also running TruckDevil (see [Remote Socket Server](#remote-socket-server--client-sessions)).
+
 ## Installation
 
 ### From package indexes
@@ -299,3 +301,83 @@ That is still the right approach for changes intended to ship with the main proj
 ### J1939 API
 
 Python docs are available in the j1939.py file. Existing modules provide example usage.
+
+### Remote Socket Server & Client Sessions
+
+If you want to access a CAN bus remotely (e.g. running on a vehicle testbed, single-board computer like a Raspberry Pi / BeagleBone, or remote Linux host), TruckDevil includes an M2-over-TCP bridge server and client connection support.
+
+The bridge server ([`tcp/truckdevil-tcp`](tcp/truckdevil-tcp)) bridges a local Linux SocketCAN interface with a TCP socket, encoding frames into the M2 ASCII format. The TruckDevil client connects to the server over TCP and treats it identically to a local CAN hardware device.
+
+#### 1. Configuring the Remote Server
+
+On the remote Linux machine with CAN hardware (SocketCAN):
+
+##### Manual execution:
+```bash
+# Display help and options
+./tcp/truckdevil-tcp -h
+usage: truckdevil-tcp [-h] [-v] bind_ip tcp_port
+
+Bridge a SocketCAN interface <-> M2-over-TCP.
+
+positional arguments:
+  bind_ip        IP address to bind the server socket (e.g., 0.0.0.0 or 192.168.7.2)
+  tcp_port       TCP port to listen on (e.g., 1234)
+
+options:
+  -h, --help     show this help message and exit
+  -v, --verbose  Increase verbosity (-v for INFO, -vv for DEBUG)
+
+# Example: Run server listening on all interfaces at port 1234
+./tcp/truckdevil-tcp -v 0.0.0.0 1234
+```
+
+*Note: Running `truckdevil-tcp` requires privileges to manage CAN network links (root or `CAP_NET_ADMIN`).*
+
+##### Running as a Systemd service:
+A template unit file is provided at [`tcp/truckdevil-tcp.service`](tcp/truckdevil-tcp.service). To install and enable it:
+
+```bash
+# Copy binary and service definition
+sudo cp tcp/truckdevil-tcp /usr/bin/truckdevil-tcp
+sudo chmod +x /usr/bin/truckdevil-tcp
+sudo cp tcp/truckdevil-tcp.service /etc/systemd/system/
+
+# Edit IP/port in /etc/systemd/system/truckdevil-tcp.service if needed
+sudo systemctl daemon-reload
+sudo systemctl enable --now truckdevil-tcp.service
+```
+
+#### 2. Configuring the Client Session (TruckDevil REPL)
+
+On your client machine running TruckDevil, configure the remote device session using `add_device` with the `m2:<ip_address>` interface syntax:
+
+```text
+(truckdevil) add_device m2:<server_ip> <channel> <baudrate> <tcp_port>
+```
+
+##### Interactive REPL Session Example:
+```text
+(truckdevil) add_device m2:192.168.7.2 can0 500000 1234
+(truckdevil) list_device
+
+***** CAN Device Info *****
+Device Type: m2 encoder
+TCP IP: 192.168.7.2
+Port: 1234
+CAN Channel: can0
+Baud Rate: 500000
+
+(truckdevil) use read_messages
+(truckdevil.read_messages) set num_messages 10
+(truckdevil.read_messages) set verbose True
+(truckdevil.read_messages) print_messages
+```
+
+##### Command-Line One-Shot / Non-Interactive Client Example:
+You can also launch TruckDevil and execute commands non-interactively in client mode:
+
+```bash
+truckdevil add_device m2:192.168.7.2 can0 500000 1234 run_module read_messages set num_messages 5 print_messages back quit
+```
+
