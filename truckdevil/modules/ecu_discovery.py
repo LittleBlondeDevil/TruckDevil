@@ -424,7 +424,7 @@ class DiscoveryCommands(Command):
         uds_discovery_requests = ["023E00FFFFFFFF", "023E01FFFFFFFF", "013EFFFFFFFFFF", "021001FFFFFFFF"]
 
         self.devil.start_data_collection()
-        messages = []
+        request_map = {} # (dst, src, fmt) -> set of pri_val
         try:
             total_msgs = len(dst_list) * len(src_list) * len(pri_list) * len(uds_pdu_formats) * len(uds_discovery_requests)
             sent_count = 0
@@ -436,7 +436,13 @@ class DiscoveryCommands(Command):
                         reserved = (pri_val >> 1) & 0x01
                         data_page = pri_val & 0x01
 
+                        req_key = (dst, src)
                         for f in uds_pdu_formats:
+                            req_tuple = (dst, src, f)
+                            if req_tuple not in request_map:
+                                request_map[req_tuple] = set()
+                            request_map[req_tuple].add(pri_val)
+
                             for req in uds_discovery_requests:
                                 msg = J1939Message(0, req)
                                 msg.src_addr = src
@@ -473,12 +479,13 @@ class DiscoveryCommands(Command):
                         key = (m.src_addr, m.pdu_format)
                         if key not in uniq_responses:
                             uniq_responses[key] = {"srcs": set(), "pris": set()}
-                        # The working src/pri for THIS endpoint was the pdu_specific/priority of our request
-                        # but we don't have the original request here easily.
-                        # Wait, the response m.pdu_specific IS the src_addr we used in the request.
-                        # The response m.priority IS likely the same priority as the request.
+                        # Correlate response with the request configuration that elicited it
+                        req_tuple = (m.src_addr, m.pdu_specific, m.pdu_format)
                         uniq_responses[key]["srcs"].add(m.pdu_specific)
-                        uniq_responses[key]["pris"].add(m.priority)
+                        if req_tuple in request_map:
+                            uniq_responses[key]["pris"].update(request_map[req_tuple])
+                        else:
+                            uniq_responses[key]["pris"].add(m.priority << 2)
 
         if not uniq_responses:
             print("No UDS responses detected.")
@@ -489,9 +496,7 @@ class DiscoveryCommands(Command):
             def format_range(s):
                 if not s: return "-"
                 l = sorted(list(s))
-                if len(l) <= 3:
-                    return ", ".join([f"0x{x:02x}" for x in l])
-                return f"0x{l[0]:02x}-0x{l[-1]:02x}"
+                return ", ".join([f"0x{x:02x}" for x in l])
 
             # Table configuration
             max_width = 110
@@ -515,12 +520,15 @@ class DiscoveryCommands(Command):
                 # Suggest IDs
                 # We pick the first working src and priority
                 best_src = sorted(list(info["srcs"]))[0]
-                best_pri = sorted(list(info["pris"]))[0]
-                
-                # Request: Pri=best_pri, Res=0, DP=0, PF=fmt, PS=addr, SA=best_src
-                req_id = j1939_fields_to_can_id(best_pri, 0, 0, fmt, addr, best_src)
-                # Response: Pri=best_pri, Res=0, DP=0, PF=fmt, PS=best_src, SA=addr
-                res_id = j1939_fields_to_can_id(best_pri, 0, 0, fmt, best_src, addr)
+                best_pri_val = sorted(list(info["pris"]))[0]
+                req_priority = (best_pri_val >> 2) & 0x07
+                req_reserved = (best_pri_val >> 1) & 0x01
+                req_data_page = best_pri_val & 0x01
+
+                # Request: Pri/Res/DP from best_pri_val, PF=fmt, PS=addr, SA=best_src
+                req_id = j1939_fields_to_can_id(req_priority, req_reserved, req_data_page, fmt, addr, best_src)
+                # Response: Pri/Res/DP from best_pri_val, PF=fmt, PS=best_src, SA=addr
+                res_id = j1939_fields_to_can_id(req_priority, req_reserved, req_data_page, fmt, best_src, addr)
                 
                 ids_str = f"S: 0x{req_id:08X} / R: 0x{res_id:08X}"
                 
