@@ -1,13 +1,38 @@
+import os
 import shlex
 import sys
-import os
+
 from prompt_toolkit import PromptSession
-from prompt_toolkit.output import DummyOutput
-from prompt_toolkit.completion import NestedCompleter, WordCompleter, Completer, Completion
+from prompt_toolkit.completion import Completer, Completion, NestedCompleter
 from prompt_toolkit.history import FileHistory
+from prompt_toolkit.output import DummyOutput
 from prompt_toolkit.patch_stdout import patch_stdout
-from prompt_toolkit.shortcuts import print_formatted_text
-from prompt_toolkit.formatted_text import HTML
+
+
+class CmdHookCompleter(Completer):
+    """
+    Adapts legacy cmd.Cmd complete_<command>(text, line, begidx, endidx) hooks
+    for prompt-toolkit's NestedCompleter.
+    """
+    def __init__(self, cmd_instance, method_name):
+        self.cmd_instance = cmd_instance
+        self.method_name = method_name
+
+    def get_completions(self, document, complete_event):
+        func = getattr(self.cmd_instance, self.method_name, None)
+        if not func:
+            return
+        line = document.text_before_cursor
+        text = document.get_word_before_cursor(WORD=True)
+        endidx = len(line)
+        begidx = endidx - len(text)
+        try:
+            matches = func(text, line, begidx, endidx)
+        except (TypeError, ValueError, AttributeError):
+            return
+        if matches:
+            for m in matches:
+                yield Completion(m, start_position=-len(text))
 
 
 class Command:
@@ -51,7 +76,13 @@ class Command:
         to preserve base completions like settings.
         """
         cmds = self.get_commands()
-        completions = {cmd: None for cmd in cmds}
+        completions = {}
+        for cmd in cmds:
+            hook = getattr(self, f"complete_{cmd}", None)
+            if callable(hook):
+                completions[cmd] = CmdHookCompleter(self, f"complete_{cmd}")
+            else:
+                completions[cmd] = None
 
         # Tab-completion for help <command>
         if 'help' in completions:

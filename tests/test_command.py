@@ -105,3 +105,28 @@ def test_cmdloop_keyboard_interrupt(mock_patch):
 
     cmd.cmdloop()
     assert cmd.session.prompt.call_count == 2
+
+
+def test_complete_hook_adaptation():
+    from prompt_toolkit.document import Document
+
+    class HookCommand(MockCommand):
+        def do_target(self, arg): pass
+        def complete_target(self, text, line, begidx, endidx):
+            verbs = ["add", "modify", "remove"]
+            if not text:
+                return verbs
+            return [v for v in verbs if v.startswith(text)]
+
+    cmd = HookCommand()
+    completer = cmd.get_completer()
+
+    # Complete after "target "
+    doc = Document("target ")
+    completions = [c.text for c in completer.get_completions(doc, None)]
+    assert completions == ["add", "modify", "remove"]
+
+    # Complete after "target a"
+    doc2 = Document("target a")
+    completions2 = [c.text for c in completer.get_completions(doc2, None)]
+    assert completions2 == ["add"]
