@@ -1,8 +1,9 @@
-import can
-from can import interface, Message
-import serial
-import time
 import threading
+import time
+
+import can
+from can import Message, interface
+import serial
 
 
 class Device:
@@ -156,11 +157,11 @@ class Device:
     def send(self, msg: Message):
         with self.device_lock:
             # Enforce inter-message delay for rate limiting
-            now = time.time()
+            now = time.monotonic()
             elapsed = now - self._last_send_time
             if elapsed < self._min_delay:
                 time.sleep(self._min_delay - elapsed)
-            self._last_send_time = time.time()
+            self._last_send_time = time.monotonic()
 
         if self.m2_used:
             # convert from Message to $1CECFF000820120003FFCAFE00* format
@@ -170,7 +171,7 @@ class Device:
             self.m2.write("${}{}{}*".format(can_id, dlc, data).encode("utf-8"))
         else:
             sleeptime = 0.0
-            max_backoff = 1.0 # Maximum 1 second backoff
+            max_backoff = 1.0  # Maximum 1 second backoff
             while True:
                 try:
                     self._can_bus.send(msg)
