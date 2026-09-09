@@ -76,3 +76,16 @@ def test_ecu_add_prop_message_duplicate_ignored():
     ecu.add_prop_message(msg1)
     ecu.add_prop_message(msg2)
     assert len(ecu.prop_messages) == 1
+
+
+def test_ecu_name_decoded_little_endian():
+    ecu = ECU(0x0B)
+    # 8 bytes: wire order least-significant byte first
+    # e.g., identity number in lowest 21 bits (byte 0, 1, 2)
+    # byte 0 = 0x12, byte 7 = 0x80 (AAC=1)
+    msg = J1939Message(0x18EEFF0B, "1200000000000080")
+    ecu.address_claimed_response = msg
+    decoded = ecu.name_decoded
+    assert decoded.identity_number == 0x12
+    assert decoded.arbitrary_address_capable == 1
+
