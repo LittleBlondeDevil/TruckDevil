@@ -1,4 +1,5 @@
 from unittest.mock import patch, MagicMock
+import pytest
 from truckdevil.libs.device import Device
 import truckdevil.modules.ecu_discovery as ecu_discovery
 
@@ -35,6 +36,19 @@ def test_ecu_discovery_scan_interval_setting(virtual_channel):
 
                 cmd.do_signal_summary("")
                 mock_sleep.assert_called_with(3)
+
+        # 4. Verify negative scan_interval is rejected by constraint
+        with pytest.raises(ValueError):
+            cmd.sm.set("scan_interval", -1)
+
+        # 5. Verify signal_summary stops data collection even if sleep raises KeyboardInterrupt
+        with patch("truckdevil.libs.pretty_shim.PRETTY_AVAILABLE", True):
+            with patch("truckdevil.modules.ecu_discovery.time.sleep", side_effect=KeyboardInterrupt):
+                cmd.devil.start_data_collection = MagicMock()
+                cmd.devil.stop_data_collection = MagicMock(return_value=[])
+                with pytest.raises(KeyboardInterrupt):
+                    cmd.do_signal_summary("")
+                cmd.devil.stop_data_collection.assert_called_once()
 
     finally:
         if device.can_bus is not None:

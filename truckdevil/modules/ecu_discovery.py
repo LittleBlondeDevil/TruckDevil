@@ -1,9 +1,9 @@
-import copy
-import time
-import dill
-import shlex
 import json
 import os
+import shlex
+import time
+
+import dill
 
 from truckdevil.j1939.j1939 import J1939Interface, J1939Message
 from truckdevil.libs.command import Command
@@ -22,7 +22,7 @@ def get_ecu_name(address: int) -> str:
         with open(json_path, "r") as f:
             addr_list = json.load(f)
             return addr_list.get(str(address), "Unknown")
-    except Exception:
+    except (FileNotFoundError, json.JSONDecodeError, KeyError, PermissionError):
         return "Unknown"
 
 
@@ -82,7 +82,11 @@ class DiscoveryCommands(Command):
     def __init__(self, device):
         sm = SettingsManager()
         sm.add_setting(Setting("name_details", False).add_description("Show full J1939 NAME decoding details"))
-        sm.add_setting(Setting("scan_interval", 10).add_description("Time in seconds to capture traffic for scans"))
+        sm.add_setting(
+            Setting("scan_interval", 10)
+            .add_constraint("minimum", lambda x: x >= 0)
+            .add_description("Time in seconds to capture traffic for scans")
+        )
         super().__init__(sm=sm)
         self.devil = J1939Interface(device)
         self.ed = ECUDiscovery()
@@ -99,7 +103,8 @@ class DiscoveryCommands(Command):
             return
         file_name = argv[0]
         try:
-            dill.dump(self.ed, open(file_name, "xb"))
+            with open(file_name, "xb") as f:
+                dill.dump(self.ed, f)
         except FileExistsError:
             print("file already exists")
             return
@@ -116,7 +121,8 @@ class DiscoveryCommands(Command):
             print("expected file name, see 'help save'")
             return
         file_name = argv[0]
-        self.ed = dill.load(open(file_name, "rb"))
+        with open(file_name, "rb") as f:
+            self.ed = dill.load(f)
         print("ECU information loaded from {}".format(file_name))
 
     def do_view_ecus(self, arg):
@@ -128,14 +134,17 @@ class DiscoveryCommands(Command):
             return
 
         import textwrap
-        
+
         # Table configuration
         max_width = 100
         addr_width = 10
         db_name_width = 20
-        name_id_width = max_width - addr_width - db_name_width - 6 # 6 for separators "| " and " | "
+        name_id_width = max_width - addr_width - db_name_width - 6  # 6 for separators "| " and " | "
 
-        header = f"{'address':<{addr_width}} | {'DB Name':<{db_name_width}} | {'unique 64-bit NAME ID':<{name_id_width}}"
+        header = (
+            f"{'address':<{addr_width}} | {'DB Name':<{db_name_width}} | "
+            f"{'unique 64-bit NAME ID':<{name_id_width}}"
+        )
         sep = "-" * max_width
         print(sep)
         print(header)
@@ -144,14 +153,14 @@ class DiscoveryCommands(Command):
         for ecu in self.ed.known_ecus:
             addr_str = f"0x{ecu.address:02x}"
             db_name = get_ecu_name(ecu.address)
-            
+
             # Prepare the NAME ID column content
             name_id_content = "unknown"
             if ecu.name is not None:
                 name_id_content = ecu.name
                 if self.sm.name_details and ecu.name_decoded:
                     name_id_content += "\n" + str(ecu.name_decoded)
-            
+
             # Wrap each piece of content
             addr_wrapped = textwrap.wrap(addr_str, width=addr_width)
             db_name_wrapped = textwrap.wrap(db_name, width=db_name_width)
@@ -171,7 +180,7 @@ class DiscoveryCommands(Command):
 
         if not self.sm.name_details:
             print("\n(use set name_details True to see NAME decodes)")
-        
+
         print("\nNote: Run active_scan to attempt to fill-out unknown NAME fields.")
 
     def do_passive_scan(self, arg):
@@ -222,31 +231,31 @@ class DiscoveryCommands(Command):
         Run traffic capture and print a formatted signal summary.
         Available only when pretty-j1939 is installed.
         """
-        from truckdevil.libs.pretty_shim import PRETTY_AVAILABLE
-        if not PRETTY_AVAILABLE:
+        import truckdevil.libs.pretty_shim as pretty_shim
+        if not getattr(pretty_shim, "PRETTY_AVAILABLE", False):
             print("signal_summary requires pretty-j1939 to be installed.")
             return
 
         interval = self.sm.scan_interval
         print(f"Capturing traffic for {interval} seconds...")
-        self.devil.start_data_collection()
-        # The capture is processed by the pretty_shim because J1939Interface 
-        # feeds messages to it during data collection if configured, 
+        # The capture is processed by the pretty_shim because J1939Interface
+        # feeds messages to it during data collection if configured,
         # or we might need to feed them manually if it's not.
-        
-        # Looking at J1939Interface.start_data_collection in truckdevil/j1939/j1939.py...
-        time.sleep(interval)
-        messages = self.devil.stop_data_collection()
-        
+        self.devil.start_data_collection()
+        try:
+            time.sleep(interval)
+        finally:
+            messages = self.devil.stop_data_collection()
+
         # We need to ensure the messages were described by the shim's describer.
         # J1939Interface._collection_loop usually doesn't call the describer.
         # It's usually called during print_messages or similar.
         # Let's manually feed the collected messages to the describer if needed.
-        
+
         import io
         import contextlib
 
-        # We suppress stdout and stderr here to capture any stray output from the pretty-j1939 
+        # We suppress stdout and stderr here to capture any stray output from the pretty-j1939
         # library while we feed it messages to build the summary.
         f = io.StringIO()
         with contextlib.redirect_stdout(f), contextlib.redirect_stderr(io.StringIO()):
@@ -255,11 +264,11 @@ class DiscoveryCommands(Command):
                     self.devil.pretty_shim.get_pretty_output(m)
                 except Exception:
                     continue
-        
-        captured_output = f.getvalue()
+
+        captured_output = f.getvalue()  # noqa: F841
 
         self.devil.pretty_shim.print_summary()
-        # If the library printed a summary during the loop, our print_summary 
+        # If the library printed a summary during the loop, our print_summary
         # should have handled it (it checks get_summary()).
         print("\nNote: This summary can be rendered as a Mermaid diagram.")
 
@@ -424,9 +433,11 @@ class DiscoveryCommands(Command):
         uds_discovery_requests = ["023E00FFFFFFFF", "023E01FFFFFFFF", "013EFFFFFFFFFF", "021001FFFFFFFF"]
 
         self.devil.start_data_collection()
-        request_map = {} # (dst, src, fmt) -> set of pri_val
+        request_map = {}  # (dst, src, fmt) -> set of pri_val
         try:
-            total_msgs = len(dst_list) * len(src_list) * len(pri_list) * len(uds_pdu_formats) * len(uds_discovery_requests)
+            total_msgs = (
+                len(dst_list) * len(src_list) * len(pri_list) * len(uds_pdu_formats) * len(uds_discovery_requests)
+            )
             sent_count = 0
 
             for dst in dst_list:
@@ -436,7 +447,7 @@ class DiscoveryCommands(Command):
                         reserved = (pri_val >> 1) & 0x01
                         data_page = pri_val & 0x01
 
-                        req_key = (dst, src)
+                        req_key = (dst, src)  # noqa: F841
                         for f in uds_pdu_formats:
                             req_tuple = (dst, src, f)
                             if req_tuple not in request_map:
@@ -462,7 +473,7 @@ class DiscoveryCommands(Command):
         finally:
             messages = self.devil.stop_data_collection()
 
-        uniq_responses = {} # key: (dst_addr, pdu_format) -> value: {srcs: set, pris: set}
+        uniq_responses = {}  # key: (dst_addr, pdu_format) -> value: {srcs: set, pris: set}
         for m in messages:
             # Check if it's a response to one of our requests
             # Destination of response should be one of our sources
@@ -494,9 +505,10 @@ class DiscoveryCommands(Command):
             from j1939.j1939 import j1939_fields_to_can_id
 
             def format_range(s):
-                if not s: return "-"
-                l = sorted(list(s))
-                return ", ".join([f"0x{x:02x}" for x in l])
+                if not s:
+                    return "-"
+                vals = sorted(list(s))
+                return ", ".join([f"0x{x:02x}" for x in vals])
 
             # Table configuration
             max_width = 110
@@ -506,7 +518,10 @@ class DiscoveryCommands(Command):
             pris_width = 10
             ids_width = max_width - (addr_width + fmt_width + srcs_width + pris_width) - 12
 
-            header = f"{'Target':<{addr_width}} | {'Fmt':<{fmt_width}} | {'Working Srcs':<{srcs_width}} | {'Pris':<{pris_width}} | {'Suggested Send/Recv IDs'}"
+            header = (
+                f"{'Target':<{addr_width}} | {'Fmt':<{fmt_width}} | {'Working Srcs':<{srcs_width}} | "
+                f"{'Pris':<{pris_width}} | {'Suggested Send/Recv IDs'}"
+            )
             sep = "-" * max_width
             print("\nDiscovered UDS-capable endpoints:")
             print(sep)
@@ -516,7 +531,7 @@ class DiscoveryCommands(Command):
             for (addr, fmt), info in uniq_responses.items():
                 src_str = format_range(info["srcs"])
                 pri_str = format_range(info["pris"])
-                
+
                 # Suggest IDs
                 # We pick the first working src and priority
                 best_src = sorted(list(info["srcs"]))[0]
@@ -529,9 +544,9 @@ class DiscoveryCommands(Command):
                 req_id = j1939_fields_to_can_id(req_priority, req_reserved, req_data_page, fmt, addr, best_src)
                 # Response: Pri/Res/DP from best_pri_val, PF=fmt, PS=best_src, SA=addr
                 res_id = j1939_fields_to_can_id(req_priority, req_reserved, req_data_page, fmt, best_src, addr)
-                
+
                 ids_str = f"S: 0x{req_id:08X} / R: 0x{res_id:08X}"
-                
+
                 # Wrapping
                 addr_wrapped = textwrap.wrap(f"0x{addr:02x}", width=addr_width)
                 fmt_wrapped = textwrap.wrap(f"0x{fmt:02x}", width=fmt_width)
@@ -539,7 +554,9 @@ class DiscoveryCommands(Command):
                 pris_wrapped = textwrap.wrap(pri_str, width=pris_width)
                 ids_wrapped = textwrap.wrap(ids_str, width=ids_width)
 
-                num_lines = max(len(addr_wrapped), len(fmt_wrapped), len(srcs_wrapped), len(pris_wrapped), len(ids_wrapped))
+                num_lines = max(
+                    len(addr_wrapped), len(fmt_wrapped), len(srcs_wrapped), len(pris_wrapped), len(ids_wrapped)
+                )
                 for i in range(num_lines):
                     a = addr_wrapped[i] if i < len(addr_wrapped) else ""
                     f = fmt_wrapped[i] if i < len(fmt_wrapped) else ""

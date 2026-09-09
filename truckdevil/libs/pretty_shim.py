@@ -239,9 +239,10 @@ class PrettyShim:
             # If it's a JSON string, parse it
             if isinstance(summary_data, str) and summary_data.startswith("{"):
                 try:
-                    import json
+                    import importlib
 
-                    summary_data = json.loads(summary_data)
+                    json_mod = importlib.import_module("json")
+                    summary_data = json_mod.loads(summary_data)
                 except Exception:
                     pass
 
