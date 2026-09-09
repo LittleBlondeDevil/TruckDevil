@@ -826,7 +826,10 @@ class J1939Interface:
                                 # print(f'extracted_data: {extracted_data:d}')
                             
                             if str(spn) == "2846":
-                                industry_group = extracted_data
+                                name_value = int.from_bytes(
+                                    bytes.fromhex(message.data), byteorder="little"
+                                )
+                                industry_group = (name_value >> 60) & 0x07
 
                             if 8 < total_bits <= 16:  # (2 bytes)
                                 extracted_data = int.from_bytes(

@@ -35,3 +35,18 @@ def test_j1939_name_str():
 
     name_no = J1939Name(0x0000000000000000)
     assert "Arbitrary Address Capable: No" in str(name_no)
+
+
+def test_j1939_name_industry_group_specific():
+    # Industry group 2 (Agricultural and Forestry Equipment)
+    # IG is bits 60-62. 2 << 60 = 0x2000000000000000
+    name = J1939Name(0x2000000000000000)
+    assert name.industry_group == 2
+    assert name.get_vehicle_system_name() == "Industry group specific"
+    assert name.get_function_name() == "Industry group specific"
+
+    # Industry group 0 or 1
+    name_on_highway = J1939Name(0x1000000000000000)
+    assert name_on_highway.industry_group == 1
+    assert name_on_highway.get_vehicle_system_name() != "Industry group specific"
+

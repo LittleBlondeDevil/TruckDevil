@@ -1,6 +1,7 @@
 import json
 import os
 
+
 class J1939NameDecoder:
     _instance = None
     _db = None
@@ -17,7 +18,7 @@ class J1939NameDecoder:
             json_path = os.path.join(base_path, "resources", "json_files", "dataBitDecoding.json")
             with open(json_path, "r") as f:
                 self._db = json.load(f)
-        except Exception:
+        except (FileNotFoundError, json.JSONDecodeError, PermissionError):
             self._db = {}
 
     def get_name(self, spn, value):
@@ -26,6 +27,7 @@ class J1939NameDecoder:
         if self._db and spn_str in self._db:
             return self._db[spn_str].get(val_str, "Unknown")
         return "Unknown"
+
 
 class J1939Name:
     def __init__(self, name_val):
@@ -39,7 +41,7 @@ class J1939Name:
             self.name_int = int(name_val, 16)
         else:
             self.name_int = name_val
-        
+
         self.decode()
         self.decoder = J1939NameDecoder()
 
@@ -70,9 +72,13 @@ class J1939Name:
         return self.decoder.get_name(2846, self.industry_group)
 
     def get_vehicle_system_name(self):
+        if self.industry_group not in (0, 1):
+            return "Industry group specific"
         return self.decoder.get_name(2842, self.vehicle_system)
 
     def get_function_name(self):
+        if self.industry_group not in (0, 1):
+            return "Industry group specific"
         return self.decoder.get_name(2841, self.function)
 
     def get_manufacturer_name(self):
@@ -84,7 +90,7 @@ class J1939Name:
         func = self.get_function_name()
         mfg = self.get_manufacturer_name()
         aac_str = "Yes" if self.arbitrary_address_capable else "No"
-        
+
         lines = [
             f"NAME: 0x{self.name_int:016x}",
             f"  Arbitrary Address Capable: {aac_str}",
