@@ -1,4 +1,5 @@
 import shlex
+import re
 
 try:
     import bitstring
@@ -11,9 +12,57 @@ except ImportError:
     PRETTY_AVAILABLE = False
 
 # Constants for pretty_j1939 integration
-DEFAULT_PRETTY_ARGS = "--no-format --theme synthwave --summary --bytes"
+# Changed --no-format to --format to leverage library-side formatting
+DEFAULT_PRETTY_ARGS = "--format --theme synthwave --bytes"
 MAGIC_TRUCKDEVIL = "<truckdevil>"
 MAGIC_DEFAULT = ""
+
+
+def strip_ansi(text):
+    """
+    Strips ANSI escape sequences from a string.
+    """
+    return re.sub(r"\x1b\[[0-9;]*m", "", text)
+
+
+def extract_original_segment(original, clean, clean_start, clean_end):
+    """
+    Given an original string with ANSI codes and its cleaned version,
+    extract the segment from the original string that corresponds to
+    the range [clean_start, clean_end) in the cleaned version.
+    """
+    orig_idx = 0
+    clean_idx = 0
+
+    seg_start = -1
+    seg_end = -1
+
+    while orig_idx < len(original):
+        if clean_idx == clean_start and seg_start == -1:
+            seg_start = orig_idx
+
+        if clean_idx == clean_end and seg_end == -1:
+            seg_end = orig_idx
+            break
+
+        # Check for ANSI escape sequence
+        if original[orig_idx : orig_idx + 2] == "\x1b[":
+            end_ansi = original.find("m", orig_idx)
+            if end_ansi != -1:
+                orig_idx = end_ansi + 1
+                continue
+
+        # Regular character
+        orig_idx += 1
+        clean_idx += 1
+
+    if seg_end == -1:
+        seg_end = len(original)
+
+    if seg_start == -1:
+        return ""
+
+    return original[seg_start:seg_end]
 
 
 class PrettyShim:
@@ -56,7 +105,7 @@ class PrettyShim:
             describe_spns=args.spn,
             describe_link_layer=args.link,
             describe_transport_layer=args.transport,
-            real_time=args.real_time,
+            real_time=False,
             include_na=args.include_na,
             include_raw_data=args.include_raw_data,
             enable_isotp=args.enable_isotp,
@@ -164,6 +213,20 @@ class PrettyShim:
         except Exception as e:
             return f"Error pretty printing: {e}"
 
+    @staticmethod
+    def print_ansi(text):
+        """
+        Prints text containing ANSI escape sequences using prompt_toolkit
+        if available, falling back to standard print.
+        """
+        try:
+            from prompt_toolkit.shortcuts import print_formatted_text
+            from prompt_toolkit.formatted_text import ANSI
+
+            print_formatted_text(ANSI(text))
+        except ImportError:
+            print(text)
+
     def print_summary(self):
         if not self.describer or not self.renderer:
             return
@@ -172,6 +235,39 @@ class PrettyShim:
             summary_data = self.describer.get_summary()
             if not summary_data:
                 return
-            print(self.renderer.render_summary(summary_data, indent=self.indent))
+
+            # If it's a JSON string, parse it
+            if isinstance(summary_data, str) and summary_data.startswith("{"):
+                try:
+                    import importlib
+
+                    json_mod = importlib.import_module("json")
+                    summary_data = json_mod.loads(summary_data)
+                except Exception:
+                    pass
+
+            # If the summary contains a Mermaid graph, it might already be formatted if self.indent is True
+            if isinstance(summary_data, dict) and "Summary" in summary_data:
+                self.print_ansi(summary_data["Summary"])
+            else:
+                rendered = self.renderer.render_summary(summary_data, indent=self.indent)
+
+                # Extract Mermaid graph from colored JSON-like string if necessary
+                stripped_rendered = rendered.strip()
+                clean_stripped = strip_ansi(stripped_rendered)
+                match = re.search(
+                    r"['\"]Summary['\"]\s*:\s*['\"](graph LR;.*)['\"]\s*}$",
+                    clean_stripped,
+                )
+                if match:
+                    start_clean = match.start(1)
+                    end_clean = match.end(1)
+                    mermaid_colored = extract_original_segment(
+                        stripped_rendered, clean_stripped, start_clean, end_clean
+                    )
+                    self.print_ansi(mermaid_colored)
+                    return
+
+                self.print_ansi(rendered)
         except Exception as e:
             print(f"Error printing summary: {e}")

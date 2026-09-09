@@ -1,4 +1,5 @@
 from truckdevil.j1939.j1939 import J1939Message
+from truckdevil.libs.j1939_name import J1939Name
 
 
 class ECU:
@@ -6,6 +7,7 @@ class ECU:
         self._address = address
         self._address_claimed_response = None
         self._prop_messages = []
+        self._name_decoded = None
 
     @property
     def address(self):
@@ -18,6 +20,16 @@ class ECU:
         return self._address_claimed_response.data
 
     @property
+    def name_decoded(self):
+        if self.name is None:
+            return None
+        if self._name_decoded is None:
+            self._name_decoded = J1939Name(
+                int.from_bytes(bytes.fromhex(self.name), byteorder="little")
+            )
+        return self._name_decoded
+
+    @property
     def address_claimed_response(self) -> J1939Message:
         return self._address_claimed_response
 
@@ -27,9 +39,10 @@ class ECU:
             raise ValueError("Address claimed should have PDU Format 0xEE")
         if msg.src_addr != self.address:
             raise ValueError("Address of ECU does not match this ECU")
-        if len(msg.data) != 16:
+        if len(msg.data) != 16:  # 8 bytes encoded as 16 hex characters
             raise ValueError("NAME should be 8 bytes long")
         self._address_claimed_response = msg
+        self._name_decoded = None  # Clear cached decoded name
 
     @property
     def prop_messages(self) -> list:
@@ -46,7 +59,13 @@ class ECU:
         self._prop_messages.append(msg)
 
     def __str__(self):
-        name = "unknown"
+        from modules.ecu_discovery import get_ecu_name
+        name_from_db = get_ecu_name(self.address)
+
+        name_from_claimed = "unknown"
         if self.name is not None:
-            name = self.name
-        return "address: {:<3}   NAME: {}".format(self.address, name)
+            name_from_claimed = self.name
+
+        return "address: 0x{:02x}: {} ({})   NAME: {}".format(
+            self.address, name_from_db, self.address, name_from_claimed
+        )

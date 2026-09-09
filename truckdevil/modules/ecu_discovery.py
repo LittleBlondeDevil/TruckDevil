@@ -1,10 +1,38 @@
-import copy
+import json
+import os
+import shlex
 import time
+
 import dill
 
 from truckdevil.j1939.j1939 import J1939Interface, J1939Message
 from truckdevil.libs.command import Command
 from truckdevil.libs.ecu import ECU
+from truckdevil.libs.settings import SettingsManager, Setting
+
+
+def get_ecu_name(address: int) -> str:
+    """
+    Look up the default ECU name from the J1939 database.
+    """
+    try:
+        # Construct path to the json file
+        base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        json_path = os.path.join(base_path, "resources", "json_files", "src_addr_list.json")
+        with open(json_path, "r") as f:
+            addr_list = json.load(f)
+            return addr_list.get(str(address), "Unknown")
+    except (FileNotFoundError, json.JSONDecodeError, KeyError, PermissionError):
+        return "Unknown"
+
+
+def format_ecu_address(address: int) -> str:
+    """
+    Format ECU address as: 0x<hex>: <name> (<decimal>)
+    Example: 0x0b: Brake System Controller (11)
+    """
+    name = get_ecu_name(address)
+    return "0x{:02x}: {} ({})".format(address, name, address)
 
 
 def input_to_int(in_str: str) -> int:
@@ -52,7 +80,14 @@ class DiscoveryCommands(Command):
     prompt = "(truckdevil.ecu_discovery) "
 
     def __init__(self, device):
-        super().__init__()
+        sm = SettingsManager()
+        sm.add_setting(Setting("name_details", False).add_description("Show full J1939 NAME decoding details"))
+        sm.add_setting(
+            Setting("scan_interval", 10)
+            .add_constraint("minimum", lambda x: x >= 0)
+            .add_description("Time in seconds to capture traffic for scans")
+        )
+        super().__init__(sm=sm)
         self.devil = J1939Interface(device)
         self.ed = ECUDiscovery()
 
@@ -68,7 +103,8 @@ class DiscoveryCommands(Command):
             return
         file_name = argv[0]
         try:
-            dill.dump(self.ed, open(file_name, "xb"))
+            with open(file_name, "xb") as f:
+                dill.dump(self.ed, f)
         except FileExistsError:
             print("file already exists")
             return
@@ -85,7 +121,8 @@ class DiscoveryCommands(Command):
             print("expected file name, see 'help save'")
             return
         file_name = argv[0]
-        self.ed = dill.load(open(file_name, "rb"))
+        with open(file_name, "rb") as f:
+            self.ed = dill.load(f)
         print("ECU information loaded from {}".format(file_name))
 
     def do_view_ecus(self, arg):
@@ -95,8 +132,56 @@ class DiscoveryCommands(Command):
         if len(self.ed.get_all_addresses()) == 0:
             print("no ecu information stored. See the passive_scan command.")
             return
+
+        import textwrap
+
+        # Table configuration
+        max_width = 100
+        addr_width = 10
+        db_name_width = 20
+        name_id_width = max_width - addr_width - db_name_width - 6  # 6 for separators "| " and " | "
+
+        header = (
+            f"{'address':<{addr_width}} | {'DB Name':<{db_name_width}} | "
+            f"{'unique 64-bit NAME ID':<{name_id_width}}"
+        )
+        sep = "-" * max_width
+        print(sep)
+        print(header)
+        print(sep)
+
         for ecu in self.ed.known_ecus:
-            print(ecu)
+            addr_str = f"0x{ecu.address:02x}"
+            db_name = get_ecu_name(ecu.address)
+
+            # Prepare the NAME ID column content
+            name_id_content = "unknown"
+            if ecu.name is not None:
+                name_id_content = ecu.name
+                if self.sm.name_details and ecu.name_decoded:
+                    name_id_content += "\n" + str(ecu.name_decoded)
+
+            # Wrap each piece of content
+            addr_wrapped = textwrap.wrap(addr_str, width=addr_width)
+            db_name_wrapped = textwrap.wrap(db_name, width=db_name_width)
+            name_id_wrapped = []
+            # For NAME ID, we want to preserve internal newlines (from decoded info)
+            for part in name_id_content.split('\n'):
+                name_id_wrapped.extend(textwrap.wrap(part, width=name_id_width))
+
+            # Print the wrapped rows
+            num_lines = max(len(addr_wrapped), len(db_name_wrapped), len(name_id_wrapped))
+            for i in range(num_lines):
+                a = addr_wrapped[i] if i < len(addr_wrapped) else ""
+                d = db_name_wrapped[i] if i < len(db_name_wrapped) else ""
+                n = name_id_wrapped[i] if i < len(name_id_wrapped) else ""
+                print(f"{a:<{addr_width}} | {d:<{db_name_width}} | {n:<{name_id_width}}")
+            print(sep)
+
+        if not self.sm.name_details:
+            print("\n(use set name_details True to see NAME decodes)")
+
+        print("\nNote: Run active_scan to attempt to fill-out unknown NAME fields.")
 
     def do_passive_scan(self, arg):
         """
@@ -104,7 +189,7 @@ class DiscoveryCommands(Command):
         """
         print("scanning...")
         self.devil.start_data_collection()
-        time.sleep(10)
+        time.sleep(self.sm.scan_interval)
         messages = self.devil.stop_data_collection()
         known_addresses = self.ed.get_all_addresses()
         for m in messages:
@@ -140,6 +225,52 @@ class DiscoveryCommands(Command):
             print("added {} new ecus.".format(ecus_added))
         else:
             print("no new ecus found.")
+
+    def do_signal_summary(self, arg):
+        """
+        Run traffic capture and print a formatted signal summary.
+        Available only when pretty-j1939 is installed.
+        """
+        import truckdevil.libs.pretty_shim as pretty_shim
+        if not getattr(pretty_shim, "PRETTY_AVAILABLE", False):
+            print("signal_summary requires pretty-j1939 to be installed.")
+            return
+
+        interval = self.sm.scan_interval
+        print(f"Capturing traffic for {interval} seconds...")
+        # The capture is processed by the pretty_shim because J1939Interface
+        # feeds messages to it during data collection if configured,
+        # or we might need to feed them manually if it's not.
+        self.devil.start_data_collection()
+        try:
+            time.sleep(interval)
+        finally:
+            messages = self.devil.stop_data_collection()
+
+        # We need to ensure the messages were described by the shim's describer.
+        # J1939Interface._collection_loop usually doesn't call the describer.
+        # It's usually called during print_messages or similar.
+        # Let's manually feed the collected messages to the describer if needed.
+
+        import io
+        import contextlib
+
+        # We suppress stdout and stderr here to capture any stray output from the pretty-j1939
+        # library while we feed it messages to build the summary.
+        f = io.StringIO()
+        with contextlib.redirect_stdout(f), contextlib.redirect_stderr(io.StringIO()):
+            for m in messages:
+                try:
+                    self.devil.pretty_shim.get_pretty_output(m)
+                except Exception:
+                    continue
+
+        captured_output = f.getvalue()  # noqa: F841
+
+        self.devil.pretty_shim.print_summary()
+        # If the library printed a summary during the loop, our print_summary
+        # should have handled it (it checks get_summary()).
+        print("\nNote: This summary can be rendered as a Mermaid diagram.")
 
     def do_find_boot_msg(self, arg):  # noqa: C901
         """
@@ -183,9 +314,9 @@ class DiscoveryCommands(Command):
                 reboot_message = m
                 break
         if reboot_message is None:
-            print("no messages detected for ECU {}.".format(address))
+            print("no messages detected for ECU {}.".format(format_ecu_address(address)))
         else:
-            print("reboot message for ECU {}: \n{}".format(address, reboot_message))
+            print("reboot message for ECU {}: \n{}".format(format_ecu_address(address), reboot_message))
 
     def do_find_proprietary(self, arg):  # noqa: C901
         """
@@ -226,7 +357,7 @@ class DiscoveryCommands(Command):
                     self.ed.add_known_ecu(e)
                 e.add_prop_message(m)
         if e is None:
-            print("no proprietary messages found for address {}.".format(address))
+            print("no proprietary messages found for address {}.".format(format_ecu_address(address)))
             return
         discovered = len(e.prop_messages) - num_prop_messages
         if discovered > 0:
@@ -234,59 +365,206 @@ class DiscoveryCommands(Command):
         else:
             print("no additional proprietary messages found.")
         if len(e.prop_messages) > 0:
-            print("Proprietary messages for address {}:".format(address))
+            print("Proprietary messages for address {}:".format(format_ecu_address(address)))
             for p in e.prop_messages:
                 print(p)
 
     def do_find_uds(self, arg):  # noqa: C901
-        # TODO: add progress bar
         """
-        Provide the address of the ECU to determine if it responds to a UDS session.
-        Performs passive and active scanning techniques.
+        Scan for ECUs that support UDS (Unified Diagnostic Services).
+        Supports scanning ranges of destination addresses, source addresses, and priorities.
 
-        usage: find_uds <address>
+        usage: find_uds [dst=<range>] [src=<range>] [pri=<range>]
+
+        Defaults:
+            dst: All discovered ECUs (see active_scan)
+            src: 0xf1, 0xf2
+            pri: 0x18 (Priority 6)
+
+        Ranges can be:
+            Single value: 0x11
+            Dash range: 0x11-0x20
+            Comma list: 0x11,0x12,0x15
+
+        Example:
+            find_uds dst=0x11 src=0xf1-0xf2 pri=0x18,0x1c
         """
-        argv = arg.split()
-        if len(argv) == 0:
-            print("expected address, see 'help find_proprietary'")
+        def parse_range(range_str):
+            if not range_str:
+                return []
+            try:
+                if "," in range_str:
+                    return [input_to_int(x.strip()) for x in range_str.split(",")]
+                if "-" in range_str:
+                    parts = range_str.split("-")
+                    if len(parts) == 2:
+                        start, end = parts
+                        return list(range(input_to_int(start), input_to_int(end) + 1))
+                return [input_to_int(range_str)]
+            except ValueError:
+                return []
+
+        dst_list = self.ed.get_all_addresses()
+        src_list = [0xf1, 0xf2]
+        pri_list = [0x18]  # Default to 0x18 (Pri 6, RB 0, DP 0)
+
+        argv = shlex.split(arg)
+        if len(argv) > 0:
+            # Backward compatibility: if first arg is just an address and not a key=value
+            if "=" not in argv[0]:
+                dst_list = [input_to_int(argv[0])]
+                argv = argv[1:]
+
+            for a in argv:
+                if a.startswith("dst="):
+                    dst_list = parse_range(a[4:])
+                elif a.startswith("src="):
+                    src_list = parse_range(a[4:])
+                elif a.startswith("pri="):
+                    pri_list = parse_range(a[4:])
+
+        if not dst_list:
+            print("No destination addresses provided and none discovered. See 'active_scan' or provide 'dst='.")
             return
-        address = input_to_int(argv[0])
-        if address < 0 or address > 255:
-            print("address should be between 0-255.")
-            return
-        print("Scanning...")
-        self.devil.start_data_collection()
+
+        print(f"Scanning UDS on destinations {dst_list} from sources {src_list} with priorities {pri_list}...")
+
         uds_pdu_formats = [0xDA, 0xDB, 0xCD, 0xCE, 0xEF]
-        tester_present_request = "023E00FFFFFFFF"
-        msg = J1939Message(0x180000F9, tester_present_request)
-        msg.pdu_specific = address
-        messages_to_send = []
-        for f in uds_pdu_formats:
-            msg.pdu_format = f
-            for pri in range(0, 8):
-                for dp in range(0, 2):
-                    for rb in range(0, 2):
-                        msg.priority = pri
-                        msg.data_page_bit = dp
-                        msg.reserved_bit = rb
-                        messages_to_send.append(copy.copy(msg))
-        for m in messages_to_send:
-            self.devil.send_message(m)
-            time.sleep(0.5)
-        time.sleep(5)
-        messages = self.devil.stop_data_collection()
-        uniq_responses = []
+        uds_discovery_requests = ["023E00FFFFFFFF", "023E01FFFFFFFF", "013EFFFFFFFFFF", "021001FFFFFFFF"]
+
+        self.devil.start_data_collection()
+        request_map = {}  # (dst, src, fmt) -> set of pri_val
+        try:
+            total_msgs = (
+                len(dst_list) * len(src_list) * len(pri_list) * len(uds_pdu_formats) * len(uds_discovery_requests)
+            )
+            sent_count = 0
+
+            for dst in dst_list:
+                for src in src_list:
+                    for pri_val in pri_list:
+                        priority = (pri_val >> 2) & 0x07
+                        reserved = (pri_val >> 1) & 0x01
+                        data_page = pri_val & 0x01
+
+                        req_key = (dst, src)  # noqa: F841
+                        for f in uds_pdu_formats:
+                            req_tuple = (dst, src, f)
+                            if req_tuple not in request_map:
+                                request_map[req_tuple] = set()
+                            request_map[req_tuple].add(pri_val)
+
+                            for req in uds_discovery_requests:
+                                msg = J1939Message(0, req)
+                                msg.src_addr = src
+                                msg.pdu_specific = dst
+                                msg.pdu_format = f
+                                msg.priority = priority
+                                msg.reserved_bit = reserved
+                                msg.data_page_bit = data_page
+
+                                self.devil.send_message(msg)
+                                sent_count += 1
+                                if sent_count % 10 == 0:
+                                    print(f"Sent {sent_count}/{total_msgs} requests...")
+
+            print(f"\nSent {sent_count} requests. Waiting for responses...")
+            time.sleep(2)
+        finally:
+            messages = self.devil.stop_data_collection()
+
+        uniq_responses = {}  # key: (dst_addr, pdu_format) -> value: {srcs: set, pris: set}
         for m in messages:
-            if m.pdu_format in uds_pdu_formats:
-                if m.pdu_format == 0xEF and "027E" not in m.data:
-                    continue
-                if m.can_id not in [rsp.can_id for rsp in uniq_responses]:
-                    uniq_responses.append(m)
-        if len(uniq_responses) == 0:
-            print("ECU did not respond to any tester present requests.")
+            # Check if it's a response to one of our requests
+            # Destination of response should be one of our sources
+            if m.pdu_specific in src_list:
+                # Format should be one of the UDS formats
+                if m.pdu_format in uds_pdu_formats:
+                    data = m.data
+                    # Treat 7E PR, 50 PR, 7F NR, and 0xEF with 027E as confirmation
+                    is_uds_pr = len(data) >= 4 and (data[2:4] == "7E" or data[2:4] == "50")
+                    is_uds_nr = len(data) >= 6 and data[2:4] == "7F"
+                    is_uds_ef = m.pdu_format == 0xEF and "027E" in data
+
+                    if is_uds_pr or is_uds_nr or is_uds_ef:
+                        key = (m.src_addr, m.pdu_format)
+                        if key not in uniq_responses:
+                            uniq_responses[key] = {"srcs": set(), "pris": set()}
+                        # Correlate response with the request configuration that elicited it
+                        req_tuple = (m.src_addr, m.pdu_specific, m.pdu_format)
+                        uniq_responses[key]["srcs"].add(m.pdu_specific)
+                        if req_tuple in request_map:
+                            uniq_responses[key]["pris"].update(request_map[req_tuple])
+                        else:
+                            uniq_responses[key]["pris"].add(m.priority << 2)
+
+        if not uniq_responses:
+            print("No UDS responses detected.")
         else:
-            for u in uniq_responses:
-                print("Tester present responses: \n{}".format(u))
+            import textwrap
+            from j1939.j1939 import j1939_fields_to_can_id
+
+            def format_range(s):
+                if not s:
+                    return "-"
+                vals = sorted(list(s))
+                return ", ".join([f"0x{x:02x}" for x in vals])
+
+            # Table configuration
+            max_width = 110
+            addr_width = 8
+            fmt_width = 6
+            srcs_width = 15
+            pris_width = 10
+            ids_width = max_width - (addr_width + fmt_width + srcs_width + pris_width) - 12
+
+            header = (
+                f"{'Target':<{addr_width}} | {'Fmt':<{fmt_width}} | {'Working Srcs':<{srcs_width}} | "
+                f"{'Pris':<{pris_width}} | {'Suggested Send/Recv IDs'}"
+            )
+            sep = "-" * max_width
+            print("\nDiscovered UDS-capable endpoints:")
+            print(sep)
+            print(header)
+            print(sep)
+
+            for (addr, fmt), info in uniq_responses.items():
+                src_str = format_range(info["srcs"])
+                pri_str = format_range(info["pris"])
+
+                # Suggest IDs
+                # We pick the first working src and priority
+                best_src = sorted(list(info["srcs"]))[0]
+                best_pri_val = sorted(list(info["pris"]))[0]
+                req_priority = (best_pri_val >> 2) & 0x07
+                req_reserved = (best_pri_val >> 1) & 0x01
+                req_data_page = best_pri_val & 0x01
+
+                # Request: Pri/Res/DP from best_pri_val, PF=fmt, PS=addr, SA=best_src
+                req_id = j1939_fields_to_can_id(req_priority, req_reserved, req_data_page, fmt, addr, best_src)
+                # Response: Pri/Res/DP from best_pri_val, PF=fmt, PS=best_src, SA=addr
+                res_id = j1939_fields_to_can_id(req_priority, req_reserved, req_data_page, fmt, best_src, addr)
+
+                ids_str = f"S: 0x{req_id:08X} / R: 0x{res_id:08X}"
+
+                # Wrapping
+                addr_wrapped = textwrap.wrap(f"0x{addr:02x}", width=addr_width)
+                fmt_wrapped = textwrap.wrap(f"0x{fmt:02x}", width=fmt_width)
+                srcs_wrapped = textwrap.wrap(src_str, width=srcs_width)
+                pris_wrapped = textwrap.wrap(pri_str, width=pris_width)
+                ids_wrapped = textwrap.wrap(ids_str, width=ids_width)
+
+                num_lines = max(
+                    len(addr_wrapped), len(fmt_wrapped), len(srcs_wrapped), len(pris_wrapped), len(ids_wrapped)
+                )
+                for i in range(num_lines):
+                    a = addr_wrapped[i] if i < len(addr_wrapped) else ""
+                    f = fmt_wrapped[i] if i < len(fmt_wrapped) else ""
+                    s = srcs_wrapped[i] if i < len(srcs_wrapped) else ""
+                    p = pris_wrapped[i] if i < len(pris_wrapped) else ""
+                    d = ids_wrapped[i] if i < len(ids_wrapped) else ""
+                    print(f"{a:<{addr_width}} | {f:<{fmt_width}} | {s:<{srcs_width}} | {p:<{pris_width}} | {d}")
+                print(sep)
 
     def do_request_pgn(self, arg):
         """
@@ -309,7 +587,7 @@ class DiscoveryCommands(Command):
         if pgn < 0 or pgn > 0x01FFFF:
             print("pgn should be between 0x0 - 0x1FFFF")
             return
-        print("requesting {} from {}...".format(pgn, address))
+        print("requesting {} from {}...".format(pgn, format_ecu_address(address)))
         pgn_data = "{0:06x}".format(pgn)
         pgn_data = pgn_data[4:6] + pgn_data[2:4] + pgn_data[0:2]
         self.devil.start_data_collection()

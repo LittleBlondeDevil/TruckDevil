@@ -1,6 +1,9 @@
+prompt_toolkit>=3.0.0
+python-can>=4.0.0
+dill
 pyserial>=3.5
-python-can>=4.0
-dill>=0.3.4
-setuptools>=57.0.0
-pytest>=7.0
-pyreadline3>=3.4.1; sys_platform == "win32"
+bitstring
+pytest
+pytest-cov
+# pretty_j1939 is an optional but recommended dependency
+# pretty_j1939

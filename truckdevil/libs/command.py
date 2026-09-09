@@ -1,60 +1,252 @@
-import cmd
+import os
+import shlex
 import sys
 
+from prompt_toolkit import PromptSession
+from prompt_toolkit.completion import Completer, Completion, NestedCompleter
+from prompt_toolkit.history import FileHistory
+from prompt_toolkit.output import DummyOutput
+from prompt_toolkit.patch_stdout import patch_stdout
 
-class Command(cmd.Cmd):
+
+class CmdHookCompleter(Completer):
+    """
+    Adapts legacy cmd.Cmd complete_<command>(text, line, begidx, endidx) hooks
+    for prompt-toolkit's NestedCompleter.
+    """
+    def __init__(self, cmd_instance, method_name):
+        self.cmd_instance = cmd_instance
+        self.method_name = method_name
+
+    def get_completions(self, document, complete_event):
+        func = getattr(self.cmd_instance, self.method_name, None)
+        if not func:
+            return
+        line = document.text_before_cursor
+        text = document.get_word_before_cursor(WORD=True)
+        endidx = len(line)
+        begidx = endidx - len(text)
+        try:
+            matches = func(text, line, begidx, endidx)
+        except (TypeError, ValueError, AttributeError):
+            return
+        if matches:
+            for m in matches:
+                yield Completion(m, start_position=-len(text))
+
+
+class Command:
+    intro = ""
+    prompt = "> "
+
     def __init__(self, sm=None):
         """
         :param sm: optional SettingsManager instance for tab-completion of
                    set/unset commands. Subclasses may also set self.sm after
                    calling super().__init__().
         """
-        super().__init__()
         self.sm = sm
+        self.running = True
 
-    def preloop(self):
-        """Ensure readline tab-completion works on libedit-backed systems.
+        # Use a hidden history file in the user's home directory
+        history_path = os.path.expanduser("~/.truckdevil_history")
 
-        Python's cmd.Cmd.cmdloop() uses GNU-readline syntax
-        ("tab: complete") which libedit silently ignores.  Setting the
-        libedit binding here makes tab-completion portable.
+        # In non-interactive environments (like pytest), use DummyOutput
+        # to avoid NoConsoleScreenBufferError on Windows.
+        if not sys.stdout.isatty() or "pytest" in sys.modules:
+            self.session = PromptSession(history=FileHistory(history_path), output=DummyOutput())
+        else:
+            self.session = PromptSession(history=FileHistory(history_path))
+
+    def get_prompt(self):
         """
+        Returns the prompt to be displayed. Subclasses can override this
+        to provide dynamic prompts (e.g. including device status).
+        """
+        return self.prompt
+
+    def get_commands(self):
+        """Helper to find all 'do_' methods."""
+        return [name[3:] for name in dir(self) if name.startswith("do_")]
+
+    def get_completion_dict(self):
+        """
+        Returns a dictionary representing the command structure for completion.
+        Subclasses should override this and call super().get_completion_dict()
+        to preserve base completions like settings.
+        """
+        cmds = self.get_commands()
+        completions = {}
+        for cmd in cmds:
+            hook = getattr(self, f"complete_{cmd}", None)
+            if callable(hook):
+                completions[cmd] = CmdHookCompleter(self, f"complete_{cmd}")
+            else:
+                completions[cmd] = None
+
+        # Tab-completion for help <command>
+        if 'help' in completions:
+            completions['help'] = {cmd: None for cmd in cmds if cmd != 'help'}
+
+        # Integrate SettingsManager if present
+
+        if self.sm:
+            settings_dict = {s: None for s in self.sm.settings.keys()}
+            if 'set' in completions:
+                completions['set'] = settings_dict
+            if 'unset' in completions:
+                completions['unset'] = settings_dict
+
+        return completions
+
+    def get_completer(self):
+        """Builds a NestedCompleter from the completion dictionary."""
+        return NestedCompleter.from_nested_dict(self.get_completion_dict())
+
+    def onecmd(self, line):
+        """Dispatches a single command string to the appropriate 'do_' method."""
+        line = line.strip()
+        if not line:
+            return False
+
         try:
-            import readline
+            # shlex.split handles quotes correctly for paths/values with spaces
+            argv = shlex.split(line)
+            if not argv:
+                return False
 
-            if getattr(readline, "__doc__", None) and "libedit" in readline.__doc__:
-                readline.parse_and_bind("bind ^I rl_complete")
-        except ImportError:
-            pass
+            cmd_name = argv[0]
+            arg_str = line[len(cmd_name):].strip()
 
-    def run_commands(self, argv):
+            # Special case for '?' which is common in cmd.Cmd
+            if cmd_name == '?':
+                cmd_name = 'help'
+
+            func = getattr(self, f"do_{cmd_name}", None)
+            if func:
+                # cmd.Cmd methods expect a single string argument
+                return func(arg_str)
+            else:
+                print(f"*** Unknown syntax: {line}")
+        except Exception as e:
+            print(f"*** Error executing command: {e}")
+        return False
+
+    def do_help(self, arg):
         """
-        run commands from list of arguments
+        List available commands with "help" or detailed help with "help <cmd>".
         """
-        command_names = []
-        for name in self.get_names():
-            if name.startswith("do_"):
-                command_names.append(name.strip("do_"))
-        cmd_args = []
-        for arg in argv:
-            if arg in command_names and len(cmd_args) != 0:
-                self.onecmd(" ".join(cmd_args))
-                cmd_args = []
-            cmd_args.append(arg)
-        if len(cmd_args) != 0:
-            self.onecmd(" ".join(cmd_args))
+        if not arg:
+            cmds = sorted(self.get_commands())
+            print("\nDocumented commands (type help <topic>):")
+            print("========================================")
+            # Simple column print
+            for i in range(0, len(cmds), 4):
+                print("  ".join(f"{c:<15}" for c in cmds[i:i+4]))
+            print()
+        else:
+            func = getattr(self, f"do_{arg}", None)
+            if func and func.__doc__:
+                # Clean up docstring indentation
+                doc = func.__doc__.strip()
+                # Remove common indentation
+                lines = doc.split('\n')
+                if len(lines) > 1:
+                    indent = len(lines[1]) - len(lines[1].lstrip())
+                    doc = lines[0] + '\n' + '\n'.join(line[indent:] for line in lines[1:])
+                print(doc)
+            else:
+                print(f"*** No help on {arg}")
 
-    def complete_set(self, text, line, begidx, endidx):
+    def do_settings(self, arg):
+        """Show the settings and each setting value"""
+        if self.sm:
+            print(self.sm)
+        else:
+            print("*** No settings available for this module.")
+        return
+
+    @staticmethod
+    def _parse_setting_value(setting, val_str):
+        if setting.datatype == int:
+            if val_str.startswith("0x"):
+                return int(val_str, 16)
+            return int(val_str)
+        if setting.datatype == float:
+            return float(val_str)
+        if setting.datatype == bool:
+            lowered = val_str.lower()
+            if lowered in ["true", "on", "1", "yes"]:
+                return True
+            if lowered in ["false", "off", "0", "no"]:
+                return False
+            raise ValueError("Invalid boolean value: {}".format(val_str))
+        if setting.datatype == list:
+            values = val_str.split(",")
+            if len(setting.default_value) > 0 and isinstance(setting.default_value[0], int):
+                new_values = []
+                for v in values:
+                    v_str = v.strip()
+                    new_values.append(int(v_str, 16) if v_str.startswith("0x") else int(v_str))
+                return new_values
+            return [v.strip() for v in values]
+        return val_str
+
+    def do_set(self, arg):
+        """
+        Provide a setting name and a value to set the setting. For a list of
+        available settings and their current and default values see the
+        settings command.
+
+        example:
+        set read_time 10
+        set filter_src_addr 11,249
+        """
         if not self.sm:
-            return []
+            print("*** No settings available for this module.")
+            return
 
-        settings = list(self.sm.settings.keys())
-        if not text:
-            return settings
-        return [s for s in settings if s.startswith(text)]
+        argv = shlex.split(arg)
+        if len(argv) < 2:
+            print("expected setting name and value, see 'help set'")
+            return
 
-    def complete_unset(self, text, line, begidx, endidx):
-        return self.complete_set(text, line, begidx, endidx)
+        name = argv[0]
+        val_str = argv[1]
+
+        if name not in self.sm.settings:
+            print("*** Unknown setting: {}".format(name))
+            return
+
+        try:
+            val = self._parse_setting_value(self.sm[name], val_str)
+            self.sm.set(name, val)
+        except ValueError as e:
+            print("Could not set: {}".format(e))
+        return
+
+    def do_unset(self, arg):
+        """
+        Provide a setting name to set it back to it's default value. For a list of
+        available settings and their current and default values see the
+        settings command.
+
+        example:
+        unset read_time
+        """
+        if not self.sm:
+            print("*** No settings available for this module.")
+            return
+
+        argv = shlex.split(arg)
+        if len(argv) == 0:
+            print("expected name, see 'help unset'")
+            return
+        name = argv[0]
+        if name in self.sm.settings:
+            self.sm.unset(name)
+        else:
+            print("*** Unknown setting: {}".format(name))
 
     def do_quit(self, arg):
         """
@@ -63,3 +255,47 @@ class Command(cmd.Cmd):
         the entire TruckDevil REPL immediately.
         """
         sys.exit("Exiting TruckDevil")
+
+    def run_commands(self, argv):
+        """
+        run commands from list of arguments
+        """
+        command_names = self.get_commands()
+        cmd_args = []
+        for arg in argv:
+            if arg in command_names and len(cmd_args) != 0:
+                self.onecmd(' '.join(cmd_args))
+                cmd_args = []
+            cmd_args.append(arg)
+        if len(cmd_args) != 0:
+            self.onecmd(' '.join(cmd_args))
+
+    def preloop(self):
+        """Hook method executed once when cmdloop() is called."""
+        pass
+
+    def cmdloop(self):
+        """The main REPL loop."""
+        if self.intro:
+            print(self.intro)
+
+        self.preloop()
+        while self.running:
+            try:
+                # patch_stdout allows background threads (like CAN receivers)
+                # to print without messing up the prompt.
+                with patch_stdout():
+                    text = self.session.prompt(
+                        self.get_prompt(),
+                        completer=self.get_completer()
+                    )
+                    if self.onecmd(text):
+                        # If a command returns True (like 'back'), exit this loop
+                        break
+            except KeyboardInterrupt:
+                # Ctrl-C clears the line or stops a running command
+                continue
+            except EOFError:
+                # Ctrl-D exits
+                break
+        return
