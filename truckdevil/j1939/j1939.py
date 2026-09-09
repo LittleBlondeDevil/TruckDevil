@@ -509,7 +509,8 @@ class J1939Interface:
                 j1939_message = self.read_one_message(
                     abstract_tpm, self.m_manager, timeout
                 )
-            except can.CanOperationError:
+            except Exception:
+                # Let stop_data_collection own the state transition and drain buffered data.
                 break
             if j1939_message is None:
                 continue  # timeout occurred
