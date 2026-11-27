@@ -222,6 +222,7 @@ class FrameworkCommands(cmd.Cmd):
         add_device m2 can0 250000 COM5
         add_device socketcan vcan0 500000
         add_device pcan PCAN_USBBUS1 500000
+        add_device cansub aabbccdd-usb.local@1 250000
         """
         argv = args.split()
         if len(argv) < 3:
